@@ -12,6 +12,7 @@ O Sleeve toca os seus arquivos de música e mostra e controla o Spotify, num vis
 
 - **Biblioteca** a partir das suas pastas: álbuns, artistas, músicas e curtidas, com busca e ordenação.
 - **Toca arquivos** MP3, FLAC, M4A/AAC, OGG, Opus e WAV, com fila, aleatório e repetir.
+- **Abre direto do Windows**: dois cliques num arquivo de música (ou *Abrir com › Sleeve*) tocam na hora, mesmo fora da biblioteca.
 - **Capas** de dentro do arquivo, da pasta do álbum (`cover.jpg`, `folder.jpg`…) ou, se faltar, do iTunes em 1000 px (opcional).
 - **Spotify junto**: mostra e controla o que toca no Spotify, sem login. Dar play num arquivo pausa o Spotify, e vice-versa.
 - **Tocando agora** em tela cheia, com as cores tiradas da capa, e **mini player** que fica por cima das outras janelas.

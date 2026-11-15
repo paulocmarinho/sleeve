@@ -309,6 +309,30 @@ public sealed class LibraryService
         return ("https://app.sleeve/capa/" + Path.GetFileName(existing) + "?v=" + File.GetLastWriteTimeUtc(existing).Ticks, color);
     }
 
+    /// <summary>
+    /// Lê uma música aberta direto pelo Windows (que pode nem estar na biblioteca):
+    /// etiquetas, capa e cor. O id é o mesmo da biblioteca, então se ela já estiver lá a interface reaproveita.
+    /// </summary>
+    public static object ReadOne(string path, string url)
+    {
+        var info = new FileInfo(path);
+        var e = ReadTags(path, info.LastWriteTimeUtc.Ticks, info.Length);
+        var albumId = Hash("avulso|" + (System.IO.Path.GetDirectoryName(path) ?? "") + "|" + e.Album);
+        var (cover, color) = EnsureCover(albumId, new List<FileEntry> { e });
+        return new
+        {
+            id = Hash(path),
+            title = e.Title,
+            artist = e.Artist.Length > 0 ? e.Artist : e.AlbumArtist,
+            album = e.Album,
+            number = e.Number,
+            cover,
+            color,
+            duration = double.IsFinite(e.Duration) ? Math.Round(e.Duration, 1) : 0,
+            url,
+        };
+    }
+
     /// <summary>Guarda uma capa vinda de fora (iTunes) para um álbum sem capa.</summary>
     public static (string url, string color)? SaveCover(string albumId, byte[] bytes)
     {

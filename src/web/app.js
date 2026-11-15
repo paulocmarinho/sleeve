@@ -153,7 +153,9 @@ function setLibrary(msg) {
   S.folders = msg.folders || [];
   S.scanning = !!msg.scanning;
   if (!S.scanning) S.scanCount = 0;
-  S.albumById = new Map(S.albums.map((a) => [a.id, a]));
+  // Músicas abertas fora da biblioteca continuam com o "álbum" delas
+  const loose = [...S.albumById.values()].filter((a) => a.loose);
+  S.albumById = new Map([...S.albums, ...loose].map((a) => [a.id, a]));
   S.trackById = new Map();
   S.allTracks = [];
   for (const a of S.albums) {
@@ -164,8 +166,9 @@ function setLibrary(msg) {
     }
   }
   // A fila continua valendo se as faixas ainda existirem
-  S.queue = S.queue.map((t) => S.trackById.get(t.id)).filter(Boolean);
-  S.baseQueue = S.baseQueue.map((t) => S.trackById.get(t.id)).filter(Boolean);
+  const keep = (t) => (t.loose ? t : S.trackById.get(t.id));
+  S.queue = S.queue.map(keep).filter(Boolean);
+  S.baseQueue = S.baseQueue.map(keep).filter(Boolean);
   if (S.index >= S.queue.length) S.index = S.queue.length - 1;
   renderAll();
 }
@@ -188,6 +191,20 @@ function sortedAlbums(list = S.albums) {
   else if (S.sort === 'plays') l.sort((x, y) => albumPlays(y) - albumPlays(x));
   else l.sort((x, y) => (y.added || 0) - (x.added || 0));
   return l;
+}
+
+// ---------- Músicas abertas pelo sistema (duplo clique num arquivo) ----------
+function openFiles(list) {
+  const tracks = list.map((o) => {
+    const inLibrary = S.trackById.get(o.id);
+    if (inLibrary) return inLibrary;
+    const albumId = 'avulso-' + o.id;
+    S.albumById.set(albumId, { id: albumId, title: o.album || '', artist: o.artist || '', cover: o.cover, color: o.color, tracks: [], loose: true });
+    return { id: o.id, title: o.title, artist: o.artist, number: o.number || 1, disc: 1, duration: o.duration, url: o.url, albumId, loose: true };
+  });
+  if (!tracks.length) return;
+  playList(tracks, 0);
+  openNow(true);
 }
 
 // ---------- Tocar ----------
@@ -826,6 +843,7 @@ host.on((msg) => {
       renderUpdateChip();
       if (S.view.name === 'ajustes') renderView();
       break;
+    case 'open': openFiles(msg.tracks || []); break;
     case 'media-key':
       if (msg.key === 'toggle') cmd.toggle();
       else if (msg.key === 'next') cmd.next();

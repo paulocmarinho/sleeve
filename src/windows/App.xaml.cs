@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Windows;
 
@@ -26,8 +27,13 @@ public partial class App : Application
             catch (AbandonedMutexException) { isFirst = true; }
         }
 
+        // Músicas pedidas pelo Windows (duplo clique num .mp3, "Abrir com › Sleeve")
+        var files = e.Args.Where(a => !a.StartsWith("--", StringComparison.Ordinal) && File.Exists(a)).ToArray();
+
         if (!isFirst)
         {
+            // Já tem um Sleeve aberto: entrega as músicas para ele e sai
+            OpenRequest.Write(files);
             try { EventWaitHandle.OpenExisting(ShowSignalName).Set(); }
             catch { /* a outra instância está fechando */ }
             Shutdown();
@@ -36,11 +42,24 @@ public partial class App : Application
 
         _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
         _showWait = ThreadPool.RegisterWaitForSingleObject(_showSignal, (_, _) =>
-            Dispatcher.InvokeAsync(() => (MainWindow as Sleeve.MainWindow)?.ShowFromTray()),
-            null, Timeout.Infinite, false);
+        {
+            // Vários arquivos abertos de uma vez chegam quase juntos: espera um instante e pega todos
+            Thread.Sleep(350);
+            var pending = OpenRequest.ReadAndClear();
+            Dispatcher.InvokeAsync(() =>
+            {
+                var window = MainWindow as Sleeve.MainWindow;
+                window?.ShowFromTray();
+                if (pending.Length > 0) window?.OpenFiles(pending);
+            });
+        }, null, Timeout.Infinite, false);
 
         // Primeira abertura depois da troca de nome: traz as configurações antigas
         LegacyMigration.Run();
+
+        // Aparece em "Abrir com" para MP3, FLAC etc. (só para este usuário, sem virar o padrão sozinho)
+        try { FileAssociations.Register(); }
+        catch (Exception ex) { Log(ex); }
 
         // Um erro inesperado não derruba o player; fica registrado num log
         DispatcherUnhandledException += (_, args) =>
@@ -56,6 +75,7 @@ public partial class App : Application
         var window = new MainWindow();
         MainWindow = window;
         window.Show();
+        if (files.Length > 0) window.OpenFiles(files);
     }
 
     protected override void OnExit(ExitEventArgs e)

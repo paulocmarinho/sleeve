@@ -235,6 +235,7 @@ public partial class MainWindow : Window
                 Safe(SendSettings);
                 Safe(() => SendLibrary(_library.BuildFromCache(Folders), scanning: true));
                 Safe(() => SendUpdate(_updateState));
+                if (_pendingOpen is { Length: > 0 } pending) { _pendingOpen = null; Safe(() => OpenFiles(pending)); }
                 try { await SendSpotifyAsync(); } catch (Exception ex) { App.Log(ex); }
                 _ = CheckUpdatesLaterAsync();
                 StartWatching();
@@ -490,6 +491,45 @@ public partial class MainWindow : Window
         StartWatching();
         SendLibrary(_library.BuildFromCache(Folders), scanning: true);
         await ScanAsync();
+    }
+
+    // ---------- Músicas abertas pelo Windows (duplo clique, "Abrir com") ----------
+
+    private string[]? _pendingOpen;
+    private readonly Dictionary<string, string> _fileHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Toca músicas que o Windows mandou abrir, estejam ou não na biblioteca.</summary>
+    public void OpenFiles(string[] paths)
+    {
+        if (!_ready || _core is null)
+        {
+            // A interface ainda está carregando: toca assim que ela avisar que está pronta
+            _pendingOpen = (_pendingOpen ?? Array.Empty<string>()).Concat(paths).ToArray();
+            return;
+        }
+
+        var tracks = new List<object>();
+        foreach (var path in paths.OrderBy(p => p, StringComparer.CurrentCultureIgnoreCase))
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(path);
+                if (dir is null || !LibraryService.Extensions.Contains(Path.GetExtension(path).ToLowerInvariant())) continue;
+                if (!_fileHosts.TryGetValue(dir, out var host))
+                {
+                    // A pasta do arquivo vira um endereço interno, como as pastas da biblioteca
+                    host = $"arquivo{_fileHosts.Count}.sleeve";
+                    _core.SetVirtualHostNameToFolderMapping(host, dir, CoreWebView2HostResourceAccessKind.Allow);
+                    _fileHosts[dir] = host;
+                }
+                tracks.Add(LibraryService.ReadOne(path, $"https://{host}/" + Uri.EscapeDataString(Path.GetFileName(path))));
+            }
+            catch (Exception ex)
+            {
+                App.Log(ex);
+            }
+        }
+        if (tracks.Count > 0) Post(new { type = "open", tracks });
     }
 
     // ---------- Arquivos novos com o Sleeve aberto ----------

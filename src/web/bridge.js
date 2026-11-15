@@ -23,6 +23,7 @@
 //   {type:'spotify', info:{…}|null}
 //   {type:'settings', hiRes, startup, pinned, mini}
 //   {type:'update', state:'idle'|'checking'|'downloading'|'ready'|'none'|'error', version, current}
+//   {type:'open', tracks:[{id,title,artist,album,cover,color,duration,url}]}  músicas abertas pelo sistema
 //   {type:'media-key', key:'toggle'|'next'|'previous'}
 
 function windowsHost() {
@@ -46,6 +47,10 @@ function demoHost() {
         const up = new URLSearchParams(location.search).get('atualizacao');
         emit({ type: 'update', state: up ? 'ready' : 'none', version: up ? '0.7.1' : null, current: '0.7.0' });
         emit({ type: 'library', ...demoLibrary(), scanning: false });
+        if (new URLSearchParams(location.search).get('abrir')) {
+          emit({ type: 'open', tracks: [{ id: 'arquivo-1', title: 'Good Morning', artist: 'Kanye West', album: 'Graduation', cover: null, color: '#8E44AD', duration: 195, url: '' }] });
+          emit({ type: 'library', ...demoLibrary(), scanning: false }); // a biblioteca atualiza depois: a música aberta continua
+        }
         const sp = new URLSearchParams(location.search).get('spotify');
         if (sp) emit({ type: 'spotify', info: demoSpotify(sp === 'tocando') });
       }
