@@ -122,7 +122,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   margin-left: auto; height: 34px; padding: 0 14px; border: 0; border-radius: 99px;
   background: var(--brand-violet); color: var(--on-brand); font-size: 13px; font-weight: 700;
 }
-.update-chip + .win-buttons { margin-left: 8px; }
+.update-chip:not([hidden]) + .win-buttons { margin-left: 8px; }
 .win { width: 40px; height: 36px; border: 0; border-radius: 10px; background: transparent; display: grid; place-items: center; color: var(--ink); }
 .win svg { width: 16px; height: 16px; }
 .win:hover { background: var(--hover-strong); }
