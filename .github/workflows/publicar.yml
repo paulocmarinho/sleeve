@@ -1,0 +1,60 @@
+# Gera o Sleeve.exe e publica em Releases sempre que a versão do Sleeve.csproj mudar.
+# O app instalado procura essas versões e se atualiza sozinho.
+name: Publicar versão
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - '.github/workflows/publicar.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Ler a versão do Sleeve.csproj
+        id: versao
+        shell: pwsh
+        run: |
+          [xml]$proj = Get-Content src/windows/Sleeve.csproj
+          $v = ($proj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $v) { throw "Sem <Version> no Sleeve.csproj" }
+          "numero=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Essa versão já foi publicada?
+        id: existe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "v${{ steps.versao.outputs.numero }}" *> $null
+          if ($LASTEXITCODE -eq 0) { "sim=true" >> $env:GITHUB_OUTPUT } else { "sim=false" >> $env:GITHUB_OUTPUT }
+          exit 0
+
+      - name: Gerar o Sleeve.exe
+        if: steps.existe.outputs.sim == 'false'
+        run: >
+          dotnet publish src/windows/Sleeve.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -o dist
+
+      - name: Publicar em Releases
+        if: steps.existe.outputs.sim == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.versao.outputs.numero }}"
+          Compress-Archive -Path dist/Sleeve.exe, dist/Fontes -DestinationPath "Sleeve-$v-windows.zip"
+          gh release create "v$v" dist/Sleeve.exe "Sleeve-$v-windows.zip" --title "Sleeve $v" --generate-notes

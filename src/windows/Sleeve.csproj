@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Sleeve</AssemblyName>
+    <RootNamespace>Sleeve</RootNamespace>
+    <ApplicationIcon>icone.ico</ApplicationIcon>
+    <Product>Sleeve</Product>
+    <Description>Player de música com a capa do álbum em destaque.</Description>
+    <Version>0.7.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- A interface (src/web: HTML, CSS, JS e a fonte) vai dentro do .exe -->
+    <EmbeddedResource Include="..\web\**\*" Exclude="..\web\fontes\OFL.txt" LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- A licença da fonte vai ao lado do .exe, como a OFL pede -->
+    <None Include="..\web\fontes\OFL.txt" Link="Fontes\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Volume por aplicativo (Core Audio do Windows) -->
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <!-- Mostra a interface (motor do Microsoft Edge, que já vem no Windows) -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2420.47" />
+    <!-- Lê título, artista, álbum e capa dos arquivos de música -->
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+</Project>

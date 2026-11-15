@@ -1,0 +1,17 @@
+# Saídas do build
+bin/
+obj/
+dist/
+publish/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Sistema
+Thumbs.db
+Desktop.ini
+.DS_Store
