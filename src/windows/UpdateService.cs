@@ -18,12 +18,15 @@ public sealed class UpdateService
     public const string Repository = "paulocmarinho/sleeve";
     public static string ReleasesPage => $"https://github.com/{Repository}/releases/latest";
 
-    private static readonly HttpClient Http = CreateClient();
-
+    // A versão vem primeiro: os campos estáticos são preparados na ordem em que aparecem,
+    // e o cliente HTTP abaixo usa a versão no seu nome.
     public static Version Current { get; } =
         Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 0, 0);
 
     public static string CurrentText => $"{Current.Major}.{Current.Minor}.{Math.Max(0, Current.Build)}";
+
+    private static readonly Lazy<HttpClient> LazyHttp = new(CreateClient);
+    private static HttpClient Http => LazyHttp.Value;
 
     private static string? ExePath => Environment.ProcessPath;
     private static string? StagedPath => ExePath is null ? null : ExePath + ".novo";

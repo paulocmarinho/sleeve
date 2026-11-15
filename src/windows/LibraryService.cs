@@ -97,20 +97,15 @@ public sealed class LibraryService
     private List<AlbumDto> Scan(IReadOnlyList<string> folders, CancellationToken token)
     {
         var found = new List<FileEntry>();
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int count = 0;
 
         foreach (var folder in folders)
         {
-            if (!Directory.Exists(folder)) continue;
-            IEnumerable<string> files;
-            try { files = Directory.EnumerateFiles(folder, "*", options); }
-            catch { continue; }
-
-            foreach (var path in files)
+            foreach (var path in AudioFiles(folder, token))
             {
                 token.ThrowIfCancellationRequested();
-                if (!Extensions.Contains(Path.GetExtension(path).ToLowerInvariant())) continue;
+                if (!seen.Add(path)) continue; // mesma música vista por duas pastas: conta uma vez só
 
                 FileInfo info;
                 try { info = new FileInfo(path); } catch { continue; }
@@ -119,10 +114,10 @@ public sealed class LibraryService
                 FileEntry? entry;
                 lock (_gate) _entries.TryGetValue(path, out entry);
                 if (entry is null || entry.Modified != modified || entry.Size != info.Length)
-                    entry = ReadTags(path, modified, info.Length);
+                    entry = IsCloudOnly(info) ? FromFileName(path, modified, info.Length) : ReadTags(path, modified, info.Length);
 
                 found.Add(entry);
-                if (++count % 50 == 0) Progress?.Invoke(count);
+                if (++count % 10 == 0) Progress?.Invoke(count);
             }
         }
 
@@ -135,6 +130,58 @@ public sealed class LibraryService
             return Albums;
         }
     }
+
+    /// <summary>
+    /// Todos os arquivos de áudio da pasta e das pastas dentro dela, em qualquer profundidade.
+    /// Não entra em atalhos de pasta (que podem dar volta e nunca acabar) nem em pastas ocultas do sistema.
+    /// </summary>
+    private static IEnumerable<string> AudioFiles(string root, CancellationToken token)
+    {
+        if (!Directory.Exists(root)) yield break;
+        var pending = new Stack<(string dir, int depth)>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        pending.Push((root, 0));
+
+        while (pending.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            var (dir, depth) = pending.Pop();
+            if (!visited.Add(dir)) continue;
+
+            string[] files = Array.Empty<string>(), dirs = Array.Empty<string>();
+            try { files = Directory.GetFiles(dir); } catch { /* sem acesso */ }
+            try { dirs = Directory.GetDirectories(dir); } catch { /* sem acesso */ }
+
+            foreach (var f in files)
+                if (Extensions.Contains(Path.GetExtension(f).ToLowerInvariant())) yield return f;
+
+            if (depth >= 24) continue;
+            foreach (var d in dirs)
+            {
+                try
+                {
+                    var info = new DirectoryInfo(d);
+                    if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) == (FileAttributes.Hidden | FileAttributes.System)) continue;
+                    if (info.LinkTarget is not null) continue; // atalho/junção de pasta
+                    pending.Push((d, depth + 1));
+                }
+                catch
+                {
+                    // pasta sumiu no meio da leitura
+                }
+            }
+        }
+    }
+
+    /// <summary>Arquivo que está só na nuvem (OneDrive): abrir faria baixar, então usa o nome.</summary>
+    private static bool IsCloudOnly(FileInfo info) =>
+        ((int)info.Attributes & 0x00400000) != 0 || (info.Attributes & FileAttributes.Offline) != 0;
+
+    private static FileEntry FromFileName(string path, long modified, long size) => new()
+    {
+        Path = path, Modified = modified, Size = size,
+        Title = Path.GetFileNameWithoutExtension(path),
+    };
 
     private static FileEntry ReadTags(string path, long modified, long size)
     {
@@ -171,9 +218,7 @@ public sealed class LibraryService
             var list = group.OrderBy(e => e.Disc).ThenBy(e => e.Number).ThenBy(e => e.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
             var first = list[0];
             var albumName = !string.IsNullOrWhiteSpace(first.Album) ? first.Album : new DirectoryInfo(Path.GetDirectoryName(first.Path) ?? "").Name;
-            var artist = !string.IsNullOrWhiteSpace(first.AlbumArtist) ? first.AlbumArtist
-                       : list.Select(e => e.Artist).Where(a => a.Length > 0).GroupBy(a => a).Count() == 1 ? first.Artist
-                       : list.Any(e => e.Artist.Length > 0) ? "Vários artistas" : "";
+            var artist = !string.IsNullOrWhiteSpace(first.AlbumArtist) ? first.AlbumArtist : GuessAlbumArtist(list);
             var id = Hash(group.Key);
             int firstYear = list.Select(e => e.Year).FirstOrDefault(v => v > 0);
 
@@ -194,6 +239,29 @@ public sealed class LibraryService
             albums.Add(album);
         }
         return albums;
+    }
+
+    private static readonly string[] FeatSeparators = { " feat. ", " feat ", " ft. ", " ft ", " featuring ", " & ", ", ", "; ", " / ", " x " };
+
+    /// <summary>"Kanye West feat. Chris Martin" → "Kanye West"</summary>
+    private static string PrimaryArtist(string artist)
+    {
+        var a = artist.Trim();
+        foreach (var sep in FeatSeparators)
+        {
+            var i = a.IndexOf(sep, StringComparison.OrdinalIgnoreCase);
+            if (i > 0) a = a[..i];
+        }
+        return a.Trim(' ', '(', '[');
+    }
+
+    /// <summary>Sem "artista do álbum" nas etiquetas: o artista principal que mais aparece, se for a maioria.</summary>
+    private static string GuessAlbumArtist(List<FileEntry> tracks)
+    {
+        var names = tracks.Select(t => PrimaryArtist(t.Artist)).Where(a => a.Length > 0).ToList();
+        if (names.Count == 0) return "";
+        var top = names.GroupBy(a => a, StringComparer.OrdinalIgnoreCase).OrderByDescending(g => g.Count()).First();
+        return top.Count() * 2 >= names.Count ? top.Key : "Vários artistas";
     }
 
     private static string AlbumKey(FileEntry e)
@@ -341,4 +409,12 @@ public sealed class LibraryService
 
     public static string Hash(string s) =>
         Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(s.ToLowerInvariant()))).Substring(0, 16).ToLowerInvariant();
+
+    /// <summary>A pasta está dentro de outra da lista? (então já é lida junto com ela)</summary>
+    public static string? ParentIn(IEnumerable<string> folders, string path)
+    {
+        var p = path.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+        return folders.FirstOrDefault(f => p.StartsWith(f.TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                                           && !p.Equals(f.TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+    }
 }

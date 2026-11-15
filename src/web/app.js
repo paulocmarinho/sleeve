@@ -152,6 +152,7 @@ function setLibrary(msg) {
   S.albums = msg.albums || [];
   S.folders = msg.folders || [];
   S.scanning = !!msg.scanning;
+  if (!S.scanning) S.scanCount = 0;
   S.albumById = new Map(S.albums.map((a) => [a.id, a]));
   S.trackById = new Map();
   S.allTracks = [];
@@ -313,7 +314,7 @@ function renderNav() {
   $('#nav').innerHTML = NAV.map(([k, label, icon]) =>
     `<button type="button" class="nav-item${active === k ? ' active' : ''}" data-view="${k}">${icon}${label}</button>`).join('');
   document.querySelector('.nav-item.settings').classList.toggle('active', active === 'ajustes');
-  $('#files-count').textContent = S.scanning ? 'lendo…' : `${S.allTracks.length} faixas`;
+  $('#files-count').textContent = S.scanning ? (S.scanCount ? `lendo… ${S.scanCount}` : 'lendo…') : `${S.allTracks.length} faixas`;
 }
 
 function go(view, push = true) {

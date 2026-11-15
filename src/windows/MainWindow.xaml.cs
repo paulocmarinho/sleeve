@@ -195,7 +195,13 @@ public partial class MainWindow : Window
     {
         if (_core is null || !_ready) return;
         try { _core.PostWebMessageAsJson(JsonSerializer.Serialize(message)); }
-        catch { /* janela fechando */ }
+        catch (Exception ex) { App.Log(ex); }
+    }
+
+    private static void Safe(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { App.Log(ex); }
     }
 
     private static string Str(JsonElement m, string name) =>
@@ -224,12 +230,14 @@ public partial class MainWindow : Window
         switch (Str(m, "type"))
         {
             case "ready":
+                // Cada etapa por conta própria: se uma falhar, as outras continuam
                 _ready = true;
-                SendSettings();
-                SendLibrary(_library.BuildFromCache(Folders), scanning: true);
-                SendUpdate(_updateState);
-                await SendSpotifyAsync();
+                Safe(SendSettings);
+                Safe(() => SendLibrary(_library.BuildFromCache(Folders), scanning: true));
+                Safe(() => SendUpdate(_updateState));
+                try { await SendSpotifyAsync(); } catch (Exception ex) { App.Log(ex); }
                 _ = CheckUpdatesLaterAsync();
+                StartWatching();
                 await ScanAsync();
                 break;
 
@@ -324,9 +332,16 @@ public partial class MainWindow : Window
 
     private async Task CheckUpdatesLaterAsync()
     {
-        UpdateService.CleanUp();
-        await Task.Delay(TimeSpan.FromSeconds(8)); // deixa o Sleeve abrir em paz primeiro
-        await CheckUpdatesAsync(auto: true);
+        try
+        {
+            UpdateService.CleanUp();
+            await Task.Delay(TimeSpan.FromSeconds(8)); // deixa o Sleeve abrir em paz primeiro
+            await CheckUpdatesAsync(auto: true);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
     }
 
     private async Task CheckUpdatesAsync(bool auto)
@@ -343,10 +358,11 @@ public partial class MainWindow : Window
             await _updater.DownloadAsync(found.Value.version, found.Value.url);
             SendUpdate("ready", found.Value.version);
         }
-        catch
+        catch (Exception ex)
         {
             // Sem internet, repositório fora do ar ou ainda sem versões publicadas
-            SendUpdate(auto ? "idle" : "error");
+            App.Log(ex);
+            Safe(() => SendUpdate(auto ? "idle" : "error"));
         }
         finally
         {
@@ -444,6 +460,18 @@ public partial class MainWindow : Window
 
         var path = dialog.SelectedPath;
         if (Folders.Any(f => f.Equals(path, StringComparison.OrdinalIgnoreCase))) return;
+
+        // Já está dentro de uma pasta da lista: ela já é lida junto, não precisa repetir
+        var parent = LibraryService.ParentIn(Folders, path);
+        if (parent is not null)
+        {
+            MessageBox.Show($"Essa pasta já faz parte da biblioteca, porque está dentro de:\n{parent}\n\nO Sleeve lê todas as pastas dentro das que você adicionou.",
+                "Sleeve", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // A pasta nova contém pastas que já estavam na lista: ela substitui essas
+        _settings.MusicFolders.RemoveAll(f => LibraryService.ParentIn(new[] { path }, f) is not null);
         _settings.MusicFolders.Add(path);
         _settings.Save();
         FoldersChanged();
@@ -459,8 +487,72 @@ public partial class MainWindow : Window
     private async void FoldersChanged()
     {
         MapFolders();
+        StartWatching();
         SendLibrary(_library.BuildFromCache(Folders), scanning: true);
         await ScanAsync();
+    }
+
+    // ---------- Arquivos novos com o Sleeve aberto ----------
+
+    private readonly List<FileSystemWatcher> _watchers = new();
+    private DispatcherTimer? _rescanTimer;
+
+    /// <summary>Fica de olho nas pastas: música nova, apagada ou renomeada faz a biblioteca se atualizar sozinha.</summary>
+    private void StartWatching()
+    {
+        foreach (var w in _watchers) w.Dispose();
+        _watchers.Clear();
+
+        _rescanTimer ??= CreateRescanTimer();
+        foreach (var folder in Folders)
+        {
+            if (!Directory.Exists(folder)) continue;
+            try
+            {
+                var w = new FileSystemWatcher(folder)
+                {
+                    IncludeSubdirectories = true,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                    InternalBufferSize = 64 * 1024,
+                };
+                FileSystemEventHandler changed = (_, e) => OnFolderChanged(e.FullPath);
+                w.Created += changed;
+                w.Deleted += changed;
+                w.Changed += changed;
+                w.Renamed += (_, e) => OnFolderChanged(e.FullPath);
+                w.Error += (_, _) => OnFolderChanged("");
+                w.EnableRaisingEvents = true;
+                _watchers.Add(w);
+            }
+            catch (Exception ex)
+            {
+                App.Log(ex);
+            }
+        }
+    }
+
+    private DispatcherTimer CreateRescanTimer()
+    {
+        // Espera as cópias terminarem (um álbum inteiro chega em vários arquivos) antes de ler de novo
+        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        t.Tick += async (_, _) =>
+        {
+            t.Stop();
+            await ScanAsync();
+        };
+        return t;
+    }
+
+    private void OnFolderChanged(string path)
+    {
+        // Ignora o que não é música nem pasta (ex.: capas sendo salvas, arquivos temporários)
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        if (ext.Length > 0 && !LibraryService.Extensions.Contains(ext) && ext is not (".jpg" or ".jpeg" or ".png")) return;
+        Dispatcher.InvokeAsync(() =>
+        {
+            _rescanTimer?.Stop();
+            _rescanTimer?.Start();
+        });
     }
 
     // ---------- Spotify ----------

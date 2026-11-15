@@ -66,7 +66,7 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static void Log(Exception ex)
+    public static void Log(Exception ex)
     {
         try
         {
