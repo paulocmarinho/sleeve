@@ -22,7 +22,7 @@ namespace Sleeve;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private const double MiniWidth = 360, MiniHeight = 96;
+    private const double MiniWidth = 320, MiniHeight = 64;
     private const double DefaultWidth = 1200, DefaultHeight = 760;
 
     private readonly AppSettings _settings = AppSettings.Load();
@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         ApplyTheme(_settings.Dark); // abre já na cor certa, sem piscar branco
 
+        Strings.Set(_settings.Language);
         _tray = new TrayIcon();
         _tray.ToggleWindow += ToggleFromTray;
         _tray.PlayPause += () => Post(new { type = "media-key", key = "toggle" });
@@ -101,8 +102,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show(
-                "O Sleeve precisa do Microsoft Edge WebView2, que já vem no Windows 10 e 11 atualizados.\n\n" +
-                "Se ele não estiver instalado, baixe em: https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n" + ex.Message,
+                Strings.Get("webview.missing", "https://go.microsoft.com/fwlink/p/?LinkId=2124703", ex.Message),
                 "Sleeve", MessageBoxButton.OK, MessageBoxImage.Warning);
             ExitApp();
             return;
@@ -287,6 +287,11 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case "language":
+                var lang = Str(m, "lang");
+                if (Strings.Set(lang)) _tray.Relabel();
+                if (_settings.Language != Strings.Lang) { _settings.Language = Strings.Lang; _settings.Save(); }
+                break;
             case "theme":
                 var dark = Bool(m, "dark");
                 ApplyTheme(dark);
@@ -453,7 +458,7 @@ public partial class MainWindow : Window
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Escolha a pasta das suas músicas",
+            Description = Strings.Get("folder.pick"),
             UseDescriptionForTitle = true,
             ShowNewFolderButton = false,
         };
@@ -466,7 +471,7 @@ public partial class MainWindow : Window
         var parent = LibraryService.ParentIn(Folders, path);
         if (parent is not null)
         {
-            MessageBox.Show($"Essa pasta já faz parte da biblioteca, porque está dentro de:\n{parent}\n\nO Sleeve lê todas as pastas dentro das que você adicionou.",
+            MessageBox.Show(Strings.Get("folder.nested", parent),
                 "Sleeve", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -831,7 +836,7 @@ public partial class MainWindow : Window
         {
             _settings.TrayHintShown = true;
             _settings.Save();
-            _tray.Hint("O Sleeve continua tocando aqui na bandeja. Use \"Sair\" no menu para fechar de vez.");
+            _tray.Hint(Strings.Get("hint.tray"));
         }
     }
 

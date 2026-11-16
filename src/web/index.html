@@ -26,13 +26,13 @@
       </div>
       <div class="nav-group" id="nav"></div>
       <div class="nav-group">
-        <span class="nav-title">Fontes</span>
-        <div class="source"><span class="dot" id="spotify-dot"></span>Spotify<span class="muted" id="spotify-state">fechado</span></div>
-        <div class="source"><span class="dot violet"></span>Arquivos<span class="muted" id="files-count"></span></div>
+        <span class="nav-title" data-i18n="src.title">Fontes</span>
+        <div class="source"><span class="dot" id="spotify-dot"></span>Spotify<span class="muted" id="spotify-state"></span></div>
+        <div class="source"><span class="dot violet"></span><span data-i18n="src.files">Arquivos</span><span class="muted" id="files-count"></span></div>
       </div>
       <button class="nav-item settings" type="button" data-view="ajustes">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
-        Ajustes
+        <span data-i18n="nav.settings">Ajustes</span>
       </button>
     </nav>
 
@@ -40,15 +40,15 @@
       <header class="titlebar drag">
         <div class="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input id="search" type="search" aria-label="Buscar" placeholder="Buscar música, artista ou álbum">
+          <input id="search" type="search" data-i18n-attr="aria-label:search.label,placeholder:search.placeholder">
         </div>
         <button type="button" id="update-chip" class="update-chip" data-act="update-restart" hidden></button>
         <div class="win-buttons">
-          <button type="button" class="win" data-win="mini" aria-label="Mini player" title="Mini player (M)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="14" width="10" height="7" rx="1.5"/><path d="M21 10V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5"/></svg></button>
-          <button type="button" class="win" data-win="pin" aria-label="Sempre no topo" title="Sempre no topo (T)" id="pin-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v8"/></svg></button>
-          <button type="button" class="win" data-win="minimize" aria-label="Minimizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-          <button type="button" class="win" data-win="maximize" aria-label="Maximizar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-          <button type="button" class="win close" data-win="close" aria-label="Fechar (continua na bandeja)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          <button type="button" class="win" data-win="mini" data-i18n-attr="aria-label:win.mini,title:win.mini"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="14" width="10" height="7" rx="1.5"/><path d="M21 10V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5"/></svg></button>
+          <button type="button" class="win" data-win="pin" data-i18n-attr="aria-label:win.pin,title:win.pin" id="pin-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v8"/></svg></button>
+          <button type="button" class="win" data-win="minimize" data-i18n-attr="aria-label:win.minimize,title:win.minimize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <button type="button" class="win" data-win="maximize" data-i18n-attr="aria-label:win.maximize,title:win.maximize"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          <button type="button" class="win close" data-win="close" data-i18n-attr="aria-label:win.close,title:win.close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
       </header>
       <main id="view" class="view" tabindex="-1"></main>
@@ -58,7 +58,7 @@
   </div>
 
   <!-- Tocando agora, na janela inteira -->
-  <section id="now" class="now" hidden aria-label="Tocando agora"></section>
+  <section id="now" class="now" hidden data-i18n-attr="aria-label:now.playing"></section>
 
   <!-- Mini player: aparece quando a janela fica pequena -->
   <section id="mini" class="mini drag" aria-label="Mini player"></section>

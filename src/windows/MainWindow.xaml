@@ -4,7 +4,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Sleeve"
         Width="1200" Height="760"
-        MinWidth="360" MinHeight="96"
+        MinWidth="320" MinHeight="64"
         WindowStyle="None"
         ResizeMode="CanResize"
         Background="#F5F5F7"

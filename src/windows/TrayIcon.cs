@@ -13,6 +13,7 @@ public sealed class TrayIcon : IDisposable
     private readonly ToolStripMenuItem _topmost;
     private readonly ToolStripMenuItem _hiRes;
     private readonly ToolStripMenuItem _startup;
+    private readonly ToolStripMenuItem _show, _play, _next, _exit;
 
     public event Action? ToggleWindow;
     public event Action? PlayPause;
@@ -24,26 +25,30 @@ public sealed class TrayIcon : IDisposable
 
     public TrayIcon()
     {
-        _mini = new ToolStripMenuItem("Modo mini", null, (_, _) => ToggleMini?.Invoke());
-        _topmost = new ToolStripMenuItem("Sempre no topo", null, (_, _) => ToggleTopmost?.Invoke());
-        _hiRes = new ToolStripMenuItem("Capa em alta resolução", null, (_, _) => ToggleHiRes?.Invoke());
-        _startup = new ToolStripMenuItem("Iniciar com o Windows", null, (_, _) =>
+        _mini = new ToolStripMenuItem(Strings.Get("tray.mini"), null, (_, _) => ToggleMini?.Invoke());
+        _topmost = new ToolStripMenuItem(Strings.Get("tray.pin"), null, (_, _) => ToggleTopmost?.Invoke());
+        _hiRes = new ToolStripMenuItem(Strings.Get("tray.hiRes"), null, (_, _) => ToggleHiRes?.Invoke());
+        _startup = new ToolStripMenuItem(Strings.Get("tray.startup"), null, (_, _) =>
         {
             StartupManager.Set(!StartupManager.IsEnabled);
             _startup!.Checked = StartupManager.IsEnabled;
         });
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Mostrar / ocultar", null, (_, _) => ToggleWindow?.Invoke());
-        menu.Items.Add("Tocar / pausar", null, (_, _) => PlayPause?.Invoke());
-        menu.Items.Add("Próxima", null, (_, _) => Next?.Invoke());
+        _show = new ToolStripMenuItem(Strings.Get("tray.show"), null, (_, _) => ToggleWindow?.Invoke());
+        _play = new ToolStripMenuItem(Strings.Get("tray.play"), null, (_, _) => PlayPause?.Invoke());
+        _next = new ToolStripMenuItem(Strings.Get("tray.next"), null, (_, _) => Next?.Invoke());
+        _exit = new ToolStripMenuItem(Strings.Get("tray.exit"), null, (_, _) => Exit?.Invoke());
+        menu.Items.Add(_show);
+        menu.Items.Add(_play);
+        menu.Items.Add(_next);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_mini);
         menu.Items.Add(_topmost);
         menu.Items.Add(_hiRes);
         menu.Items.Add(_startup);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Sair", null, (_, _) => Exit?.Invoke());
+        menu.Items.Add(_exit);
         menu.Opening += (_, _) => _startup.Checked = StartupManager.IsEnabled;
 
         _icon = new NotifyIcon
@@ -64,6 +69,19 @@ public sealed class TrayIcon : IDisposable
         _mini.Checked = mini;
         _topmost.Checked = topmost;
         _hiRes.Checked = hiRes;
+    }
+
+    /// <summary>Reescreve o menu no idioma atual.</summary>
+    public void Relabel()
+    {
+        _show.Text = Strings.Get("tray.show");
+        _play.Text = Strings.Get("tray.play");
+        _next.Text = Strings.Get("tray.next");
+        _mini.Text = Strings.Get("tray.mini");
+        _topmost.Text = Strings.Get("tray.pin");
+        _hiRes.Text = Strings.Get("tray.hiRes");
+        _startup.Text = Strings.Get("tray.startup");
+        _exit.Text = Strings.Get("tray.exit");
     }
 
     public void Hint(string text) =>

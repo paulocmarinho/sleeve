@@ -14,7 +14,7 @@
     <ApplicationIcon>icone.ico</ApplicationIcon>
     <Product>Sleeve</Product>
     <Description>Player de música com a capa do álbum em destaque.</Description>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -16,6 +16,7 @@ public sealed class AppSettings
     public bool TrayHintShown { get; set; }
     public bool Dark { get; set; }
     public bool AutoUpdate { get; set; } = true;
+    public string? Language { get; set; } // pt-BR, en ou es; vazio segue o Windows
 
     // Tamanho da janela grande (o mini tem tamanho fixo)
     public double? Width { get; set; }

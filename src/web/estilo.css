@@ -338,21 +338,25 @@ h1 { margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spa
   .app, .now, .edge { display: none !important; }
   body { background: var(--np-base); }
   .mini {
-    position: fixed; inset: 0; display: flex; align-items: center; gap: 12px; padding: 0 10px 0 16px;
+    position: fixed; inset: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 10px;
     color: #F5F5F7; overflow: clip; background: var(--np-base);
   }
   .mini .bg { position: absolute; inset: -40%; background-size: cover; background-position: center; filter: blur(40px); }
   .mini .veil { position: absolute; inset: 0; background: var(--np-tint); }
   .mini > *:not(.bg):not(.veil):not(.line) { position: relative; }
-  .mini .cover { width: 60px; flex: none; border-radius: var(--radius-sm); background: rgba(255, 255, 255, .1); }
+  .mini .cover { width: 44px; flex: none; border-radius: 6px; background: rgba(255, 255, 255, .1); }
   .mini .cover .mark { stroke: rgba(255, 255, 255, .85); }
-  .mini .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .mini .t1 { font-weight: 700; }
-  .mini .t2 { color: var(--np-fg2); font-size: 13px; }
-  .mini .ctl { color: #F5F5F7; width: 40px; height: 40px; }
+  .mini .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .mini .t1 { font-weight: 600; font-size: 13px; }
+  .mini .t2 { color: var(--np-fg2); font-size: 12px; }
+  .mini .ctl { color: #F5F5F7; width: 30px; height: 30px; flex: none; }
   .mini .ctl:hover { background: rgba(255, 255, 255, .12); }
-  .mini .ctl.play { background: var(--np-play); color: var(--np-glyph); width: 42px; height: 42px; }
-  .mini .ctl.play svg { width: 16px; height: 16px; }
-  .mini .ctl.small svg { width: 15px; height: 15px; }
-  .mini .line { position: absolute; left: 0; bottom: 0; height: 3px; background: #F5F5F7; opacity: .9; }
+  .mini .ctl svg { width: 15px; height: 15px; }
+  .mini .ctl.play { background: transparent; color: #F5F5F7; width: 34px; height: 34px; }
+  .mini .ctl.play:hover { background: rgba(255, 255, 255, .14); }
+  .mini .ctl.play svg { width: 18px; height: 18px; }
+  .mini .ctl.small { opacity: .75; }
+  .mini .ctl.small:hover { opacity: 1; }
+  .mini .ctl.small svg { width: 13px; height: 13px; }
+  .mini .line { position: absolute; left: 0; bottom: 0; height: 2px; background: #F5F5F7; opacity: .8; }
 }

@@ -1,6 +1,7 @@
 // Sleeve — interface do player (Windows e Alba OS).
 // Toca os arquivos da sua biblioteca e mostra/controla o Spotify.
 import { host } from './bridge.js';
+import { t as tx, setLang, resolveLang, NAMES, lang } from './i18n.js';
 
 // ---------- Utilidades ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -92,6 +93,7 @@ const S = {
   likes: new Set(load('likes', [])), plays: load('plays', {}),
   volume: load('volume', 0.85), muted: false,
   nowOpen: false,
+  lang: load('lang', 'auto'), // 'auto' segue o idioma do sistema
   theme: load('theme', 'auto'), // 'auto' segue o Windows/Alba; 'light' ou 'dark' fixos
   lists: {},  // listas de faixas visíveis, para tocar a partir de um clique
 };
@@ -107,6 +109,21 @@ function applyTheme() {
   host.send({ type: 'theme', dark }); // a janela do sistema acompanha a cor de fundo
 }
 darkQuery.addEventListener('change', () => { if (S.theme === 'auto') applyTheme(); });
+
+// Idioma: textos fixos do index.html usam data-i18n e data-i18n-attr="atributo:chave,…"
+function applyLang() {
+  setLang(resolveLang(S.lang));
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = tx(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-attr]').forEach((el) => {
+    for (const pair of el.dataset.i18nAttr.split(',')) { const [attr, key] = pair.split(':'); el.setAttribute(attr, tx(key)); }
+  });
+  renderSpotifyState();
+  host.send({ type: 'language', lang }); // bandeja e janelas do sistema acompanham
+}
+function renderSpotifyState() {
+  const el = document.getElementById('spotify-state');
+  if (el) el.textContent = S.spotify ? tx(S.spotify.playing ? 'sp.playing' : 'sp.connected') : tx('sp.closed');
+}
 let dragging = null; // barra sendo arrastada agora
 
 // Quem aparece no "tocando agora": o Sleeve (arquivos) ou o Spotify
@@ -133,7 +150,7 @@ function info() {
     return {
       mode: m, title: t.title, artist: t.artist || a?.artist || '', album: a?.title || '', cover: a?.cover, color: a?.color,
       playing: !audio.paused, position: audio.currentTime || 0, duration: audio.duration || t.duration || 0,
-      canSeek: true, canPrevious: true, canNext: true, source: 'Arquivos', liked: S.likes.has(t.id),
+      canSeek: true, canPrevious: true, canNext: true, source: tx('src.files'), liked: S.likes.has(t.id),
     };
   }
   if (m === 'spotify') {
@@ -173,7 +190,7 @@ function setLibrary(msg) {
   renderAll();
 }
 
-const artistOf = (a) => a.artist || 'Artista desconhecido';
+const artistOf = (a) => a.artist || tx('lib.unknownArtist');
 function artists() {
   const map = new Map();
   for (const a of S.albums) {
@@ -320,18 +337,18 @@ function reportLocal() {
 
 // ---------- Desenho: navegação e telas ----------
 const NAV = [
-  ['albums', 'Álbuns', I.albums],
-  ['artists', 'Artistas', I.artists],
-  ['tracks', 'Músicas', I.music],
-  ['likes', 'Curtidas', I.heart],
-  ['folders', 'Pastas', I.folder],
+  ['albums', 'nav.albums', I.albums],
+  ['artists', 'nav.artists', I.artists],
+  ['tracks', 'nav.tracks', I.music],
+  ['likes', 'nav.likes', I.heart],
+  ['folders', 'nav.folders', I.folder],
 ];
 function renderNav() {
   const active = S.view.name === 'album' ? 'albums' : S.view.name === 'artist' ? 'artists' : S.view.name;
   $('#nav').innerHTML = NAV.map(([k, label, icon]) =>
-    `<button type="button" class="nav-item${active === k ? ' active' : ''}" data-view="${k}">${icon}${label}</button>`).join('');
+    `<button type="button" class="nav-item${active === k ? ' active' : ''}" data-view="${k}">${icon}${tx(label)}</button>`).join('');
   document.querySelector('.nav-item.settings').classList.toggle('active', active === 'ajustes');
-  $('#files-count').textContent = S.scanning ? (S.scanCount ? `lendo… ${S.scanCount}` : 'lendo…') : `${S.allTracks.length} faixas`;
+  $('#files-count').textContent = S.scanning ? (S.scanCount ? tx('src.readingN', { n: S.scanCount }) : tx('src.reading')) : tx('src.tracksN', { n: S.allTracks.length });
 }
 
 function go(view, push = true) {
@@ -364,7 +381,7 @@ function trackList(key, tracks, { compact = false, showAlbum = true } = {}) {
   return `<ol class="tracks">${tracks.map((t, i) => {
     const a = S.albumById.get(t.albumId);
     const playing = cur && cur.id === t.id;
-    return `<li tabindex="0" class="track${compact ? ' compact' : ''}${playing ? ' playing' : ''}" data-act="play" data-list="${esc(key)}" data-i="${i}" title="Clique duas vezes para tocar">
+    return `<li tabindex="0" class="track${compact ? ' compact' : ''}${playing ? ' playing' : ''}" data-act="play" data-list="${esc(key)}" data-i="${i}" title="${tx('track.hint')}">
       <span class="n">${compact ? (t.number || i + 1) : i + 1}</span>
       <span class="title">${esc(t.title)}</span>
       ${compact ? '' : `<span class="sub">${esc(t.artist || a?.artist || '')}${showAlbum && a ? ' · ' + esc(a.title) : ''}</span>`}
@@ -375,129 +392,131 @@ function trackList(key, tracks, { compact = false, showAlbum = true } = {}) {
 
 function emptyLibrary() {
   return `<div class="empty">${MARK}
-    <h1>${S.scanning ? 'Lendo sua biblioteca…' : 'Sua biblioteca está vazia'}</h1>
-    <p>${S.scanning ? `${S.scanCount} faixas encontradas até agora.` : 'Escolha a pasta onde ficam suas músicas. O Sleeve lê as faixas, os álbuns e as capas sozinho.'}</p>
-    ${S.scanning ? '' : `<button type="button" class="btn primary" data-act="add-folder">${I.plus}Adicionar pasta</button>`}
+    <h1>${S.scanning ? tx('lib.reading') : tx('lib.empty')}</h1>
+    <p>${S.scanning ? tx('lib.foundSoFar', { n: S.scanCount }) : tx('lib.emptyHint')}</p>
+    ${S.scanning ? '' : `<button type="button" class="btn primary" data-act="add-folder">${I.plus}${tx('lib.addFolder')}</button>`}
   </div>`;
 }
 
-const SORTS = [['recent', 'Adicionados recentemente'], ['az', 'A a Z'], ['artist', 'Artista'], ['plays', 'Mais tocados']];
+const SORTS = [['recent', 'sort.recent'], ['az', 'sort.az'], ['artist', 'sort.artist'], ['plays', 'sort.plays']];
 
 function renderView() {
   const v = S.view, el = $('#view');
   S.lists = {};
   let html = '';
   if (v.name === 'albums') {
-    html = `<div class="view-head"><h1>Sua biblioteca</h1>
-      <div class="chips">${SORTS.map(([k, l]) => `<button type="button" class="chip${S.sort === k ? ' on' : ''}" data-act="sort" data-sort="${k}">${l}</button>`).join('')}</div></div>`;
+    html = `<div class="view-head"><h1>${tx('lib.title')}</h1>
+      <div class="chips">${SORTS.map(([k, l]) => `<button type="button" class="chip${S.sort === k ? ' on' : ''}" data-act="sort" data-sort="${k}">${tx(l)}</button>`).join('')}</div></div>`;
     html += S.albums.length ? albumGrid(sortedAlbums()) : emptyLibrary();
   } else if (v.name === 'album') {
     const a = S.albumById.get(v.id);
     if (!a) { go({ name: 'albums' }, false); return; }
     const total = a.tracks.reduce((n, t) => n + (t.duration || 0), 0);
-    html = `<button type="button" class="back" data-act="back">${I.back}Voltar</button>
+    html = `<button type="button" class="back" data-act="back">${I.back}${tx('common.back')}</button>
       <div class="album-head">${coverHtml(a.cover, a.title)}
         <div class="album-info">
-          <span class="eyebrow">Álbum</span>
+          <span class="eyebrow">${tx('album.eyebrow')}</span>
           <h1>${esc(a.title)}</h1>
           <button type="button" class="artist" data-act="artist" data-name="${esc(artistOf(a))}" style="all:unset;cursor:pointer;font-size:17px;font-weight:600">${esc(artistOf(a))}</button>
-          <span class="t2">${[a.year, `${a.tracks.length} ${a.tracks.length === 1 ? 'faixa' : 'faixas'}`, fmt(total)].filter(Boolean).join(' · ')}</span>
+          <span class="t2">${[a.year, tx(a.tracks.length === 1 ? 'album.track1' : 'album.tracksN', { n: a.tracks.length }), fmt(total)].filter(Boolean).join(' · ')}</span>
           <div class="actions">
-            <button type="button" class="btn primary" data-act="play-album" data-id="${esc(a.id)}">${I.play}Tocar</button>
-            <button type="button" class="btn" data-act="shuffle-album" data-id="${esc(a.id)}">${I.shuffle}Aleatório</button>
+            <button type="button" class="btn primary" data-act="play-album" data-id="${esc(a.id)}">${I.play}${tx('common.play')}</button>
+            <button type="button" class="btn" data-act="shuffle-album" data-id="${esc(a.id)}">${I.shuffle}${tx('common.shuffle')}</button>
           </div>
         </div>
       </div>
       ${trackList('album', a.tracks, { compact: true })}`;
   } else if (v.name === 'artists') {
     const list = artists();
-    html = `<div class="view-head"><h1>Artistas</h1></div>` + (list.length ? `<div class="artists">${list.map((ar) => `
+    html = `<div class="view-head"><h1>${tx('nav.artists')}</h1></div>` + (list.length ? `<div class="artists">${list.map((ar) => `
       <button type="button" class="artist-card" data-act="artist" data-name="${esc(ar.name)}">
         ${coverHtml(ar.albums.find((a) => a.cover)?.cover, ar.name)}
         <span class="t1" style="max-width:100%">${esc(ar.name)}</span>
-        <span class="t2">${ar.albums.length} ${ar.albums.length === 1 ? 'álbum' : 'álbuns'}</span>
+        <span class="t2">${tx(ar.albums.length === 1 ? 'album.album1' : 'album.albumsN', { n: ar.albums.length })}</span>
       </button>`).join('')}</div>` : emptyLibrary());
   } else if (v.name === 'artist') {
     const list = sortedAlbums(S.albums.filter((a) => artistOf(a) === v.id));
     const tracks = list.flatMap((a) => a.tracks);
-    html = `<button type="button" class="back" data-act="back">${I.back}Voltar</button>
+    html = `<button type="button" class="back" data-act="back">${I.back}${tx('common.back')}</button>
       <div class="view-head"><h1>${esc(v.id)}</h1>
-        <div class="chips"><button type="button" class="btn primary" data-act="play-list" data-list="artist">${I.play}Tocar tudo</button></div></div>
+        <div class="chips"><button type="button" class="btn primary" data-act="play-list" data-list="artist">${I.play}${tx('common.playAll')}</button></div></div>
       ${albumGrid(list)}
-      <h2 class="section-title">Músicas</h2>${trackList('artist', tracks)}`;
+      <h2 class="section-title">${tx('nav.tracks')}</h2>${trackList('artist', tracks)}`;
   } else if (v.name === 'tracks') {
     const tracks = [...S.allTracks].sort((x, y) => norm(x.title).localeCompare(norm(y.title)));
-    html = `<div class="view-head"><h1>Músicas</h1>
-      <div class="chips"><button type="button" class="btn" data-act="shuffle-list" data-list="all">${I.shuffle}Aleatório</button></div></div>`
+    html = `<div class="view-head"><h1>${tx('nav.tracks')}</h1>
+      <div class="chips"><button type="button" class="btn" data-act="shuffle-list" data-list="all">${I.shuffle}${tx('common.shuffle')}</button></div></div>`
       + (tracks.length ? trackList('all', tracks) : emptyLibrary());
   } else if (v.name === 'likes') {
     const tracks = S.allTracks.filter((t) => S.likes.has(t.id));
-    html = `<div class="view-head"><h1>Curtidas</h1>${tracks.length ? `<div class="chips"><button type="button" class="btn primary" data-act="play-list" data-list="likes">${I.play}Tocar</button></div>` : ''}</div>`
-      + (tracks.length ? trackList('likes', tracks) : `<div class="empty">${MARK}<p>As músicas que você curtir aparecem aqui. Use o coração no "tocando agora".</p></div>`);
+    html = `<div class="view-head"><h1>${tx('nav.likes')}</h1>${tracks.length ? `<div class="chips"><button type="button" class="btn primary" data-act="play-list" data-list="likes">${I.play}${tx('common.play')}</button></div>` : ''}</div>`
+      + (tracks.length ? trackList('likes', tracks) : `<div class="empty">${MARK}<p>${tx('likes.empty')}</p></div>`);
   } else if (v.name === 'folders') {
-    html = `<div class="view-head"><h1>Pastas</h1></div>
+    html = `<div class="view-head"><h1>${tx('nav.folders')}</h1></div>
       <div class="panel">
         ${S.folders.map((f) => `<div class="row">${I.folder.replace('<svg', '<svg style="width:20px;height:20px;flex:none;color:var(--brand-violet)"')}
           <span class="grow path" title="${esc(f)}">${esc(f)}</span>
-          <button type="button" class="icon-btn" data-act="remove-folder" data-path="${esc(f)}" aria-label="Tirar a pasta ${esc(f)}">${I.trash}</button></div>`).join('')
-        || '<div class="row"><span class="grow t2">Nenhuma pasta ainda.</span></div>'}
+          <button type="button" class="icon-btn" data-act="remove-folder" data-path="${esc(f)}" aria-label="${tx('folders.remove', { path: esc(f) })}">${I.trash}</button></div>`).join('')
+        || `<div class="row"><span class="grow t2">${tx('folders.none')}</span></div>`}
       </div>
       <div class="actions">
-        <button type="button" class="btn primary" data-act="add-folder">${I.plus}Adicionar pasta</button>
-        <button type="button" class="btn" data-act="rescan"${S.scanning ? ' disabled' : ''}>${I.refresh}${S.scanning ? `Lendo… ${S.scanCount}` : 'Ler de novo'}</button>
+        <button type="button" class="btn primary" data-act="add-folder">${I.plus}${tx('lib.addFolder')}</button>
+        <button type="button" class="btn" data-act="rescan"${S.scanning ? ' disabled' : ''}>${I.refresh}${S.scanning ? tx('folders.readingN', { n: S.scanCount }) : tx('folders.rescan')}</button>
       </div>
-      <p class="note">O Sleeve lê MP3, FLAC, M4A/AAC, OGG, Opus e WAV dessas pastas e de todas as pastas dentro delas.</p>`;
+      <p class="note">${tx('folders.note')}</p>`;
   } else if (v.name === 'ajustes') {
     const sw = (key, on, label, sub) => `<div class="row"><div class="grow"><div class="t1" style="white-space:normal">${label}</div>${sub ? `<div class="t2" style="white-space:normal;font-size:13px">${sub}</div>` : ''}</div>
       <button type="button" class="switch" role="switch" aria-checked="${!!on}" aria-label="${esc(label)}" data-act="setting" data-key="${key}"></button></div>`;
     const themeBtn = (k, label) => `<button type="button" data-act="theme" data-theme="${k}" aria-pressed="${S.theme === k}">${label}</button>`;
-    html = `<div class="view-head"><h1>Ajustes</h1></div>
+    const langBtn = (k, label) => `<button type="button" data-act="lang" data-lang="${k}" aria-pressed="${S.lang === k}">${label}</button>`;
+    const segRow = (title, hint, group) => `<div class="row"><div class="grow"><div class="t1" style="white-space:normal">${title}</div>
+          <div class="t2" style="white-space:normal;font-size:13px">${hint}</div></div>
+          <div class="segmented" role="group" aria-label="${esc(title)}">${group}</div></div>`;
+    html = `<div class="view-head"><h1>${tx('nav.settings')}</h1></div>
       <div class="panel">
-        <div class="row"><div class="grow"><div class="t1" style="white-space:normal">Aparência</div>
-          <div class="t2" style="white-space:normal;font-size:13px">Automático segue o tema do sistema.</div></div>
-          <div class="segmented" role="group" aria-label="Aparência">${themeBtn('auto', 'Automático')}${themeBtn('light', 'Claro')}${themeBtn('dark', 'Escuro')}</div>
-        </div>
-        ${sw('hiRes', S.settings.hiRes, 'Capa em alta resolução', 'Busca a capa em 1000 px no iTunes quando a música não traz uma boa. Envia o nome do artista e do álbum para a Apple.')}
-        ${sw('startup', S.settings.startup, 'Iniciar com o Windows', '')}
-        ${sw('pinned', S.settings.pinned, 'Sempre no topo', '')}
+        ${segRow(tx('set.appearance'), tx('set.appearanceHint'), themeBtn('auto', tx('theme.auto')) + themeBtn('light', tx('theme.light')) + themeBtn('dark', tx('theme.dark')))}
+        ${segRow(tx('set.language'), tx('set.languageHint'), langBtn('auto', tx('theme.auto')) + Object.entries(NAMES).map(([k, n]) => langBtn(k, n)).join(''))}
+        ${sw('hiRes', S.settings.hiRes, tx('set.hiRes'), tx('set.hiResHint'))}
+        ${sw('startup', S.settings.startup, tx('set.startup'), '')}
+        ${sw('pinned', S.settings.pinned, tx('set.pinned'), '')}
       </div>
-      <h2 class="section-title">Atualizações</h2>
+      <h2 class="section-title">${tx('set.updates')}</h2>
       <div class="panel">
         <div class="row"><div class="grow"><div class="t1" style="white-space:normal">${S.update.current ? `Sleeve ${esc(S.update.current)}` : 'Sleeve'}</div>
           <div class="t2" style="white-space:normal;font-size:13px">${updateText()}</div></div>
           ${S.update.state === 'ready'
-            ? `<button type="button" class="btn primary" data-act="update-restart">Reiniciar e atualizar</button>`
-            : `<button type="button" class="btn" data-act="update-check"${['checking', 'downloading'].includes(S.update.state) ? ' disabled' : ''}>${I.refresh}Procurar</button>`}
+            ? `<button type="button" class="btn primary" data-act="update-restart">${tx('set.restart')}</button>`
+            : `<button type="button" class="btn" data-act="update-check"${['checking', 'downloading'].includes(S.update.state) ? ' disabled' : ''}>${I.refresh}${tx('set.check')}</button>`}
         </div>
-        ${sw('autoUpdate', S.settings.autoUpdate, 'Atualizar automaticamente', 'Ao abrir, o Sleeve procura a versão mais nova no GitHub e baixa sozinho.')}
+        ${sw('autoUpdate', S.settings.autoUpdate, tx('set.autoUpdate'), tx('set.autoUpdateHint'))}
       </div>
-      <p class="note">Atalhos: espaço toca e pausa, ← e → trocam de faixa, M abre o mini player, Esc fecha o tocando agora.</p>`;
+      <p class="note">${tx('set.shortcuts')}</p>`;
   } else if (v.name === 'search') {
     const q = norm(S.search.trim());
     const albums = S.albums.filter((a) => norm(a.title).includes(q) || norm(artistOf(a)).includes(q));
     const tracks = S.allTracks.filter((t) => norm(t.title).includes(q) || norm(t.artist).includes(q)).slice(0, 200);
-    html = `<div class="view-head"><h1>Resultados</h1></div>`
+    html = `<div class="view-head"><h1>${tx('search.results')}</h1></div>`
       + (albums.length ? albumGrid(albums.slice(0, 24)) : '')
-      + (tracks.length ? `<h2 class="section-title">Músicas</h2>${trackList('search', tracks)}` : '')
-      + (!albums.length && !tracks.length ? `<div class="empty"><p>Nada encontrado para "${esc(S.search)}".</p></div>` : '');
+      + (tracks.length ? `<h2 class="section-title">${tx('nav.tracks')}</h2>${trackList('search', tracks)}` : '')
+      + (!albums.length && !tracks.length ? `<div class="empty"><p>${tx('search.none', { q: esc(S.search) })}</p></div>` : '');
   }
   el.innerHTML = html;
 }
 
 function updateText() {
   const u = S.update;
-  if (u.state === 'checking') return 'Procurando atualizações…';
-  if (u.state === 'downloading') return `Baixando a versão ${esc(u.version)}…`;
-  if (u.state === 'ready') return `A versão ${esc(u.version)} está pronta. Ela entra quando o Sleeve reiniciar.`;
-  if (u.state === 'none') return 'Você está na versão mais nova.';
-  if (u.state === 'error') return 'Não deu para atualizar agora. Tente de novo mais tarde.';
-  return 'O Sleeve procura atualizações no GitHub.';
+  if (u.state === 'checking') return tx('upd.checking');
+  if (u.state === 'downloading') return tx('upd.downloading', { v: esc(u.version) });
+  if (u.state === 'ready') return tx('upd.ready', { v: esc(u.version) });
+  if (u.state === 'none') return tx('upd.none');
+  if (u.state === 'error') return tx('upd.error');
+  return tx('upd.idle');
 }
 function renderUpdateChip() {
   const chip = $('#update-chip');
   const ready = S.update.state === 'ready';
   chip.hidden = !ready;
-  chip.textContent = ready ? `Atualizar para ${S.update.version}` : '';
+  chip.textContent = ready ? tx('upd.chip', { v: S.update.version }) : '';
 }
 
 // ---------- Desenho: barra, tocando agora e mini ----------
@@ -509,12 +528,12 @@ function slider(cls, ratio) {
 function controlsHtml(i, big) {
   const local = i.mode === 'local';
   return `<div class="controls">
-    ${local ? `<button type="button" class="ctl small ${S.shuffle ? 'active' : 'dim'}" data-act="shuffle" aria-label="Aleatório" aria-pressed="${S.shuffle}">${I.shuffle}</button>` : ''}
-    <button type="button" class="ctl" data-act="prev" aria-label="Anterior"${i.canPrevious ? '' : ' disabled'}>${I.prev}</button>
-    <button type="button" class="ctl play" data-act="toggle" aria-label="${i.playing ? 'Pausar' : 'Tocar'}">${i.playing ? I.pause : I.play}</button>
-    <button type="button" class="ctl" data-act="next" aria-label="Próxima"${i.canNext ? '' : ' disabled'}>${I.next}</button>
-    ${local ? `<button type="button" class="ctl small ${S.repeat !== 'off' ? 'active' : 'dim'}" data-act="repeat" aria-label="Repetir: ${S.repeat === 'one' ? 'esta faixa' : S.repeat === 'all' ? 'tudo' : 'desligado'}">${S.repeat === 'one' ? I.repeatOne : I.repeat}</button>` : ''}
-    ${big && local ? `<button type="button" class="ctl small like" data-act="like" aria-label="${i.liked ? 'Descurtir' : 'Curtir'}" aria-pressed="${!!i.liked}">${i.liked ? I.heartOn : I.heart}</button>` : ''}
+    ${local ? `<button type="button" class="ctl small ${S.shuffle ? 'active' : 'dim'}" data-act="shuffle" aria-label="${tx('ctl.shuffle')}" aria-pressed="${S.shuffle}">${I.shuffle}</button>` : ''}
+    <button type="button" class="ctl" data-act="prev" aria-label="${tx('ctl.prev')}"${i.canPrevious ? '' : ' disabled'}>${I.prev}</button>
+    <button type="button" class="ctl play" data-act="toggle" aria-label="${i.playing ? tx('ctl.pause') : tx('ctl.play')}">${i.playing ? I.pause : I.play}</button>
+    <button type="button" class="ctl" data-act="next" aria-label="${tx('ctl.next')}"${i.canNext ? '' : ' disabled'}>${I.next}</button>
+    ${local ? `<button type="button" class="ctl small ${S.repeat !== 'off' ? 'active' : 'dim'}" data-act="repeat" aria-label="${tx(S.repeat === 'one' ? 'ctl.repeatOne' : S.repeat === 'all' ? 'ctl.repeatAll' : 'ctl.repeatOff')}">${S.repeat === 'one' ? I.repeatOne : I.repeat}</button>` : ''}
+    ${big && local ? `<button type="button" class="ctl small like" data-act="like" aria-label="${i.liked ? tx('ctl.unlike') : tx('ctl.like')}" aria-pressed="${!!i.liked}">${i.liked ? I.heartOn : I.heart}</button>` : ''}
   </div>`;
 }
 
@@ -532,7 +551,7 @@ function renderPlayback(changed = false) {
   if (i) {
     const vol = i.mode === 'spotify' ? (S.spotify.volume ?? 1) : (audio.muted ? 0 : S.volume);
     bar.innerHTML = `
-      <button type="button" class="bar-track" data-act="open-now" aria-label="Abrir tocando agora">
+      <button type="button" class="bar-track" data-act="open-now" aria-label="${tx('ctl.openNow')}">
         ${coverHtml(i.cover, i.album)}
         <span class="meta${swap ? ' swap' : ''}"><span class="t1">${esc(i.title)}</span><span class="t2">${esc([i.artist, i.album].filter(Boolean).join(' · '))}</span></span>
       </button>
@@ -540,9 +559,9 @@ function renderPlayback(changed = false) {
         <div class="progress"><span class="js-pos">${fmt(i.position)}</span>${slider('js-seek', i.duration ? i.position / i.duration : 0)}<span class="js-dur">${fmt(i.duration)}</span></div>
       </div>
       <div class="bar-right">
-        <button type="button" class="ctl small dim" data-act="mute" aria-label="Volume">${vol > 0 ? I.volume : I.mute}</button>
+        <button type="button" class="ctl small dim" data-act="mute" aria-label="${tx('ctl.volume')}">${vol > 0 ? I.volume : I.mute}</button>
         ${slider('js-vol', vol)}
-        <button type="button" class="ctl small" data-act="open-now" aria-label="Abrir tocando agora">${I.expand}</button>
+        <button type="button" class="ctl small" data-act="open-now" aria-label="${tx('ctl.openNow')}">${I.expand}</button>
       </div>`;
   }
 
@@ -591,30 +610,30 @@ function renderNow(i, swap) {
     <div class="veil"></div>
     <div class="layer">
       <div class="now-top drag">
-        <button type="button" class="pill-btn" data-act="close-now">${I.down}Biblioteca</button>
-        <span class="now-source">${i ? `${i.playing ? 'Tocando agora' : 'Pausado'} · ${esc(i.source)}` : 'Nada tocando'}</span>
+        <button type="button" class="pill-btn" data-act="close-now">${I.down}${tx('now.library')}</button>
+        <span class="now-source">${i ? `${i.playing ? tx('now.playing') : tx('now.paused')} · ${esc(i.source)}` : tx('now.nothing')}</span>
         <div class="win-buttons" style="margin-left:8px">
-          <button type="button" class="win" data-win="mini" aria-label="Mini player">${I.mini}</button>
-          <button type="button" class="win" data-win="minimize" aria-label="Minimizar">${I.minimize}</button>
-          <button type="button" class="win close" data-win="close" aria-label="Fechar (continua na bandeja)">${I.close}</button>
+          <button type="button" class="win" data-win="mini" aria-label="${tx('win.mini')}">${I.mini}</button>
+          <button type="button" class="win" data-win="minimize" aria-label="${tx('win.minimize')}">${I.minimize}</button>
+          <button type="button" class="win close" data-win="close" aria-label="${tx('win.close')}">${I.close}</button>
         </div>
       </div>
       <div class="now-main">
         <div class="now-cover">${i?.cover ? `<img src="${esc(i.cover)}" alt="">` : MARK}</div>
         <div class="now-info${swap ? ' swap' : ''}">
-          <h1>${esc(i?.title || 'Nada tocando')}</h1>
-          <span class="artist">${esc(i?.artist || 'Escolha um álbum na biblioteca ou dê play no Spotify.')}</span>
+          <h1>${esc(i?.title || tx('now.nothing'))}</h1>
+          <span class="artist">${esc(i?.artist || tx('now.hint'))}</span>
           <span class="album">${esc(i?.album || '')}</span>
           ${i ? `<div class="progress">${slider('js-seek', i.duration ? i.position / i.duration : 0)}
               <div class="times"><span class="js-pos">${fmt(i.position)}</span><span class="js-dur">${fmt(i.duration)}</span></div></div>
             ${controlsHtml(i, true)}` : ''}
         </div>
-        ${i?.mode === 'local' ? `<aside class="queue" aria-label="A seguir"><h2>A seguir</h2>
+        ${i?.mode === 'local' ? `<aside class="queue" aria-label="${tx('now.upNext')}"><h2>${tx('now.upNext')}</h2>
           ${upcoming.length ? upcoming.map((t, k) => {
             const a = S.albumById.get(t.albumId);
             return `<button type="button" class="q" data-act="jump" data-i="${S.index + 1 + k}">${coverHtml(a?.cover)}
               <span style="min-width:0;display:flex;flex-direction:column"><span class="t1" style="font-size:14px">${esc(t.title)}</span><span class="t2">${esc(t.artist || a?.artist || '')}</span></span></button>`;
-          }).join('') : '<span class="empty-q">Fim da fila.</span>'}
+          }).join('') : `<span class="empty-q">${tx('now.endOfQueue')}</span>`}
         </aside>` : ''}
       </div>
     </div>`;
@@ -624,10 +643,11 @@ function renderMini(i) {
   $('#mini').innerHTML = `
     <div class="bg" style="${i?.cover ? `background-image:url('${esc(i.cover)}')` : ''}"></div><div class="veil"></div>
     ${coverHtml(i?.cover)}
-    <div class="meta"><span class="t1">${esc(i?.title || 'Nada tocando')}</span><span class="t2">${esc(i?.artist || 'Sleeve')}</span></div>
-    ${i ? `<button type="button" class="ctl play" data-act="toggle" aria-label="${i.playing ? 'Pausar' : 'Tocar'}">${i.playing ? I.pause : I.play}</button>
-    <button type="button" class="ctl small" data-act="next" aria-label="Próxima">${I.next}</button>` : ''}
-    <button type="button" class="ctl small" data-win="mini" aria-label="Expandir">${I.expand}</button>
+    <div class="meta"><span class="t1">${esc(i?.title || tx('now.nothing'))}</span><span class="t2">${esc(i?.artist || 'Sleeve')}</span></div>
+    ${i ? `<button type="button" class="ctl" data-act="prev" aria-label="${tx('ctl.prev')}"${i.canPrevious ? '' : ' disabled'}>${I.prev}</button>
+    <button type="button" class="ctl play" data-act="toggle" aria-label="${i.playing ? tx('ctl.pause') : tx('ctl.play')}">${i.playing ? I.pause : I.play}</button>
+    <button type="button" class="ctl" data-act="next" aria-label="${tx('ctl.next')}"${i.canNext ? '' : ' disabled'}>${I.next}</button>` : ''}
+    <button type="button" class="ctl small" data-win="mini" aria-label="${tx('win.expand')}">${I.expand}</button>
     <div class="line js-line" style="width:${i?.duration ? (i.position / i.duration) * 100 : 0}%"></div>`;
 }
 
@@ -702,6 +722,7 @@ document.addEventListener('click', (e) => {
     case 'update-check': host.send({ type: 'update', action: 'check' }); break;
     case 'update-restart': host.send({ type: 'update', action: 'restart' }); break;
     case 'theme': S.theme = d.theme; save('theme', S.theme); applyTheme(); renderView(); break;
+    case 'lang': S.lang = d.lang; save('lang', S.lang); applyLang(); renderAll(); break;
     case 'setting': {
       const val = !S.settings[d.key];
       S.settings[d.key] = val;
@@ -834,7 +855,7 @@ host.on((msg) => {
       // Deu play no Spotify enquanto um arquivo tocava: pausa o arquivo
       if (S.spotify?.playing && !(was?.playing) && !audio.paused) audio.pause();
       $('#spotify-dot').classList.toggle('on', !!S.spotify);
-      $('#spotify-state').textContent = S.spotify ? (S.spotify.playing ? 'tocando' : 'conectado') : 'fechado';
+      renderSpotifyState();
       renderPlayback();
       break;
     }
@@ -856,7 +877,9 @@ host.on((msg) => {
 const params = new URLSearchParams(location.search);
 const tela = params.get('tela');
 if (params.get('tema')) S.theme = params.get('tema');
+if (params.get('idioma')) S.lang = params.get('idioma');
 applyTheme();
+applyLang();
 renderAll();
 host.send({ type: 'ready' });
 if (tela === 'tocando') setTimeout(() => openNow(true), 300);

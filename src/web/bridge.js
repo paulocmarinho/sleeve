@@ -15,6 +15,7 @@
 //   {type:'folders', action:'add'|'remove'|'rescan', path?}
 //   {type:'setting', key, value}
 //   {type:'theme', dark}                  tema da interface, para a janela acompanhar
+//   {type:'language', lang}               idioma da interface (pt-BR, en, es), para a bandeja e os avisos
 //   {type:'update', action:'check'|'restart'|'page'}
 //
 // Mensagens que a interface recebe:
