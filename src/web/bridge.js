@@ -14,6 +14,7 @@
 //   {type:'local', title, artist, playing}  o que o próprio Sleeve está tocando
 //   {type:'folders', action:'add'|'remove'|'rescan', path?}
 //   {type:'setting', key, value}
+//   {type:'lyrics', key, title, artist, album, duration, url, online}  pede a letra; volta {type:'lyrics', key, synced, plain}
 //   {type:'theme', dark}                  tema da interface, para a janela acompanhar
 //   {type:'language', lang}               idioma da interface (pt-BR, en, es), para a bandeja e os avisos
 //   {type:'update', action:'check'|'restart'|'page'}
@@ -54,6 +55,14 @@ function demoHost() {
         }
         const sp = new URLSearchParams(location.search).get('spotify');
         if (sp) emit({ type: 'spotify', info: demoSpotify(sp === 'tocando') });
+      }
+      if (msg.type === 'lyrics') {
+        // Letra de mentira, só para ver o painel funcionando no navegador
+        const versos = ['Luz de fim de tarde na janela', 'O disco gira devagar', '', 'Cada faixa conta uma história',
+          'E a capa guarda o lugar', 'Volta o refrão, volta a lembrança', 'Ninguém precisa apressar', '',
+          'Deixa tocar até o fim', 'Deixa o lado B girar'];
+        const synced = versos.map((v, k) => { const t = 2 + k * 4; return `[${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}.00] ${v}`; }).join('\n');
+        setTimeout(() => listeners.forEach((fn) => fn({ type: 'lyrics', key: msg.key, synced, plain: null })), 400);
       }
     },
     on: (fn) => listeners.push(fn),

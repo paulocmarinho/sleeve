@@ -11,12 +11,14 @@ O Sleeve toca os seus arquivos de música e mostra e controla o Spotify, num vis
 ## Recursos
 
 - **Biblioteca** a partir das suas pastas: álbuns, artistas, músicas e curtidas, com busca e ordenação.
-- **Toca arquivos** MP3, FLAC, M4A/AAC, OGG, Opus e WAV, com fila, aleatório e repetir.
+- **Toca arquivos** MP3, FLAC, M4A/AAC, OGG, Opus e WAV, com aleatório e repetir.
+- **Fila editável**: botão direito numa música para *Tocar a seguir* ou *Adicionar à fila*; no *A seguir*, arraste para mudar a ordem.
+- **Letras sincronizadas** que acompanham a música: de um `.lrc` ao lado do arquivo, da letra gravada nele ou do [LRCLIB](https://lrclib.net) (opcional).
 - **Abre direto do Windows**: dois cliques num arquivo de música (ou *Abrir com › Sleeve*) tocam na hora, mesmo fora da biblioteca.
 - **Capas** de dentro do arquivo, da pasta do álbum (`cover.jpg`, `folder.jpg`…) ou, se faltar, do iTunes em 1000 px (opcional).
 - **Spotify junto**: mostra e controla o que toca no Spotify, sem login. Dar play num arquivo pausa o Spotify, e vice-versa.
 - **Tocando agora** em tela cheia, com as cores tiradas da capa, e **mini player** que fica por cima das outras janelas.
-- **Modo claro, escuro ou automático** (segue o sistema).
+- **Modo claro, escuro ou automático** (segue o sistema), em português, inglês ou espanhol.
 - **Bandeja do Windows**, volume só do Spotify na roda do mouse e opção de iniciar com o Windows.
 - **Atualiza sozinho** pelas versões publicadas aqui no GitHub.
 
@@ -47,6 +49,7 @@ Configurações ficam em `%AppData%\Sleeve`; a biblioteca lida e as capas, em `%
 | Espaço | Tocar / pausar |
 | ← / → | Faixa anterior / próxima |
 | M | Mini player |
+| L | Letra (no tocando agora) |
 | T | Sempre no topo |
 | Ctrl+F | Buscar |
 | Esc | Fechar o tocando agora |

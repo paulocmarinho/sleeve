@@ -287,6 +287,23 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case "lyrics":
+            {
+                var key = Str(m, "key");
+                try
+                {
+                    var url = Str(m, "url");
+                    var path = url.Length > 0 ? PathFromUrl(url) : null;
+                    var found = await LyricsService.GetAsync(path, Str(m, "title"), Str(m, "artist"), Str(m, "album"), (int)Num(m, "duration"), Bool(m, "online"));
+                    Post(new { type = "lyrics", key, synced = found?.Synced, plain = found?.Plain });
+                }
+                catch (Exception ex)
+                {
+                    App.Log(ex);
+                    Post(new { type = "lyrics", key, synced = (string?)null, plain = (string?)null });
+                }
+                break;
+            }
             case "language":
                 var lang = Str(m, "lang");
                 if (Strings.Set(lang)) _tray.Relabel();
@@ -502,6 +519,24 @@ public partial class MainWindow : Window
 
     private string[]? _pendingOpen;
     private readonly Dictionary<string, string> _fileHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Caminho no disco de um endereço interno de música (musicaN.sleeve ou arquivoN.sleeve).</summary>
+    private string? PathFromUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+        var host = uri.Host;
+        string? root = null;
+        if (host.StartsWith("musica", StringComparison.OrdinalIgnoreCase) && host.EndsWith(".sleeve", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(host[6..^7], out var i) && i >= 0 && i < Folders.Count)
+            root = Folders[i];
+        else
+            root = _fileHosts.FirstOrDefault(kv => kv.Value.Equals(host, StringComparison.OrdinalIgnoreCase)).Key;
+        if (root is null) return null;
+
+        var full = Path.GetFullPath(Path.Combine(root, Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/')).Replace('/', Path.DirectorySeparatorChar)));
+        var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase) && File.Exists(full) ? full : null;
+    }
 
     /// <summary>Toca músicas que o Windows mandou abrir, estejam ou não na biblioteca.</summary>
     public void OpenFiles(string[] paths)

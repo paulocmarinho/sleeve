@@ -41,6 +41,10 @@ const I = {
   mini: svg('<rect x="3" y="14" width="10" height="7" rx="1.5"/><path d="M21 10V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5"/>'),
   minimize: svg('<path d="M5 12h14"/>'),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  lyrics: svg('<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
+  queueAdd: svg('<path d="M4 6h12M4 11h12M4 16h7"/><path d="M18 14v6M15 17h6"/>'),
+  playNext: svg('<path d="M4 6h10M4 11h10M4 16h6"/><path class="fill" d="M15 13v8l6-4z"/>'),
+  album: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>'),
   pin: svg('<path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v8"/>'),
 };
 const MARK = '<svg class="mark" viewBox="0 0 120 120" aria-hidden="true"><line x1="30.2" y1="58.6" x2="74.2" y2="25.6"/><line x1="45.8" y1="94.4" x2="89.8" y2="61.4"/></svg>';
@@ -93,6 +97,8 @@ const S = {
   likes: new Set(load('likes', [])), plays: load('plays', {}),
   volume: load('volume', 0.85), muted: false,
   nowOpen: false,
+  lyricsOn: load('lyricsOn', false), onlineLyrics: load('onlineLyrics', true),
+  lyr: { key: '', state: 'idle', lines: null, plain: '' }, // letra da música atual
   lang: load('lang', 'auto'), // 'auto' segue o idioma do sistema
   theme: load('theme', 'auto'), // 'auto' segue o Windows/Alba; 'light' ou 'dark' fixos
   lists: {},  // listas de faixas visíveis, para tocar a partir de um clique
@@ -283,6 +289,194 @@ function cycleRepeat() {
   save('repeat', S.repeat);
   renderPlayback();
 }
+
+// ---------- Fila: tocar a seguir, adicionar, tirar e reordenar ----------
+function enqueue(tracks, nextUp) {
+  tracks = tracks.filter(Boolean);
+  if (!tracks.length) return;
+  if (!current()) { playList(tracks, 0); return; }
+  if (nextUp) {
+    S.queue.splice(S.index + 1, 0, ...tracks);
+    const b = S.baseQueue.indexOf(current());
+    S.baseQueue.splice(b < 0 ? S.baseQueue.length : b + 1, 0, ...tracks);
+  } else {
+    S.queue.push(...tracks);
+    S.baseQueue.push(...tracks);
+  }
+  renderPlayback();
+  toast(tx(nextUp ? 'queue.toastNext' : 'queue.toastAdd', { t: tracks.length === 1 ? tracks[0].title : tx('album.tracksN', { n: tracks.length }) }));
+}
+function dequeue(i) {
+  if (i <= S.index || i >= S.queue.length) return;
+  const [t] = S.queue.splice(i, 1);
+  // Tira da lista base só se a faixa não aparecer mais na fila
+  if (!S.queue.includes(t)) { const b = S.baseQueue.indexOf(t); if (b >= 0) S.baseQueue.splice(b, 1); }
+  renderPlayback();
+}
+function moveInQueue(from, to) {
+  if (from <= S.index || to <= S.index || from === to || from >= S.queue.length) return;
+  const [t] = S.queue.splice(from, 1);
+  S.queue.splice(Math.min(to, S.queue.length), 0, t);
+  renderPlayback();
+}
+
+let toastTimer = 0;
+function toast(text) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.append(el); }
+  el.textContent = text;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+// ---------- Letras ----------
+const lyricCache = new Map();
+const lyricsKey = (i) => (i ? `${i.title}\u0000${i.artist}` : '');
+/** Lê uma letra no formato LRC ([mm:ss.xx] texto) e devolve as linhas em ordem de tempo. */
+function parseLrc(text) {
+  const out = [];
+  for (const raw of String(text).split(/\r?\n/)) {
+    const tags = [...raw.matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)];
+    if (!tags.length) continue;
+    const words = raw.replace(/\[[^\]]*\]/g, '').replace(/<[^>]*>/g, '').trim();
+    for (const m of tags) out.push({ t: +m[1] * 60 + parseFloat(m[2].replace(':', '.')), text: words });
+  }
+  out.sort((a, b) => a.t - b.t);
+  // Linhas vazias no começo não servem para nada
+  while (out.length && !out[0].text) out.shift();
+  return out;
+}
+/** Pede a letra da música atual quando o painel de letra está aberto. */
+function wantLyrics(i) {
+  if (!S.lyricsOn || !S.nowOpen || !i) return;
+  const key = lyricsKey(i);
+  if (S.lyr.key === key) return;
+  if (lyricCache.has(key)) { S.lyr = { key, ...lyricCache.get(key) }; return; }
+  S.lyr = { key, state: 'loading', lines: null, plain: '' };
+  const t = i.mode === 'local' ? current() : null;
+  host.send({
+    type: 'lyrics', key, title: i.title, artist: i.artist, album: i.album,
+    duration: Math.round(i.duration || 0), url: t?.url || null, online: !!S.onlineLyrics,
+  });
+}
+function gotLyrics(msg) {
+  const lines = msg.synced ? parseLrc(msg.synced) : [];
+  const entry = { state: lines.length || msg.plain ? 'ok' : 'none', lines: lines.length ? lines : null, plain: lines.length ? '' : (msg.plain || '').trim() };
+  if (msg.key) lyricCache.set(msg.key, entry);
+  if (msg.key === S.lyr.key) { S.lyr = { key: msg.key, ...entry }; renderPlayback(); }
+}
+function lyricsHtml() {
+  const L = S.lyr;
+  const tag = `data-key="${esc(L.key + '|' + L.state)}"`;
+  if (L.lines) {
+    return `<div class="lyr-scroll" ${tag} data-k="-2">${L.lines.map((l, k) =>
+      `<p class="lyr-line${l.text ? '' : ' gap'}" data-act="lyr-seek" data-t="${l.t}">${l.text ? esc(l.text) : '♪'}</p>`).join('')}</div>`;
+  }
+  if (L.plain) return `<div class="lyr-scroll plain" ${tag}>${esc(L.plain).replace(/\n/g, '<br>')}</div>`;
+  return `<div class="lyr-scroll" ${tag}><p class="lyr-note">${tx(L.state === 'loading' ? 'lyrics.loading' : 'lyrics.none')}</p></div>`;
+}
+let lyrUserUntil = 0; // rolou a letra com a mão: espera um pouco antes de voltar a acompanhar
+function paintLyrics(pos, instant = false) {
+  const box = document.querySelector('.lyr-scroll[data-k]');
+  if (!box || !S.lyr.lines) return;
+  const lines = S.lyr.lines;
+  let k = -1;
+  for (let j = 0; j < lines.length; j++) { if (lines[j].t <= pos + 0.25) k = j; else break; }
+  if (!instant && String(k) === box.dataset.k) return;
+  box.dataset.k = k;
+  const els = box.children;
+  for (let j = 0; j < els.length; j++) { els[j].classList.toggle('on', j === k); els[j].classList.toggle('past', j < k); }
+  if (performance.now() < lyrUserUntil) return;
+  const el = els[Math.max(0, k)];
+  if (el) box.scrollTo({ top: el.offsetTop - box.clientHeight * 0.38 + el.offsetHeight / 2, behavior: instant ? 'auto' : 'smooth' });
+}
+
+// ---------- Menu do botão direito ----------
+let menuAt = 0;
+function closeMenu() { document.getElementById('ctx')?.remove(); }
+function openMenu(x, y, items) {
+  closeMenu();
+  menuAt = performance.now();
+  const el = document.createElement('div');
+  el.id = 'ctx';
+  el.className = 'ctx';
+  el.setAttribute('role', 'menu');
+  el.innerHTML = items.map((it, k) => `<button type="button" role="menuitem" data-k="${k}">${it.icon || ''}${esc(it.label)}</button>`).join('');
+  document.body.append(el);
+  const r = el.getBoundingClientRect();
+  el.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  el.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-k]');
+    if (!b) return;
+    e.stopPropagation();
+    closeMenu();
+    items[+b.dataset.k].run();
+  });
+  el.querySelector('button')?.focus();
+}
+document.addEventListener('contextmenu', (e) => {
+  const li = e.target.closest('[data-act="play"]');
+  const q = e.target.closest('.queue [data-act="jump"]');
+  if (!li && !q) return;
+  e.preventDefault();
+  if (q) {
+    const i = +q.dataset.i;
+    openMenu(e.clientX, e.clientY, [
+      { label: tx('common.play'), icon: I.play, run: () => { S.index = i; loadCurrent(true); } },
+      { label: tx('queue.remove'), icon: I.close, run: () => dequeue(i) },
+    ]);
+    return;
+  }
+  const list = S.lists[li.dataset.list] || [];
+  const t = list[+li.dataset.i];
+  if (!t) return;
+  const a = S.albumById.get(t.albumId);
+  const items = [
+    { label: tx('common.play'), icon: I.play, run: () => playList(list, +li.dataset.i) },
+    { label: tx('queue.playNext'), icon: I.playNext, run: () => enqueue([t], true) },
+    { label: tx('queue.add'), icon: I.queueAdd, run: () => enqueue([t], false) },
+  ];
+  if (a && !a.loose && S.view.name !== 'album') items.push({ label: tx('menu.goAlbum'), icon: I.album, run: () => go({ name: 'album', id: a.id }) });
+  if (a && !a.loose && S.view.name !== 'artist') items.push({ label: tx('menu.goArtist'), icon: I.artists, run: () => go({ name: 'artist', id: artistOf(a) }) });
+  openMenu(e.clientX, e.clientY, items);
+});
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ctx')) closeMenu(); }, true);
+window.addEventListener('blur', closeMenu);
+// Rolar a tela fecha o menu (menos a rolagem que já estava acontecendo quando ele abriu)
+document.addEventListener('scroll', () => { if (performance.now() - menuAt > 250) closeMenu(); }, true);
+
+// Arrastar faixas no "A seguir" para mudar a ordem
+let dragFrom = -1;
+document.addEventListener('dragstart', (e) => {
+  const q = e.target.closest?.('.queue [data-act="jump"]');
+  if (!q) return;
+  dragFrom = +q.dataset.i;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(dragFrom));
+  q.classList.add('dragging');
+});
+document.addEventListener('dragover', (e) => {
+  const q = e.target.closest?.('.queue [data-act="jump"]');
+  if (dragFrom < 0 || !q) return;
+  e.preventDefault();
+  document.querySelectorAll('.queue .q.over').forEach((x) => x !== q && x.classList.remove('over', 'after'));
+  q.classList.add('over');
+  q.classList.toggle('after', dragFrom < +q.dataset.i); // descendo: entra depois; subindo: entra antes
+});
+document.addEventListener('drop', (e) => {
+  const q = e.target.closest?.('.queue [data-act="jump"]');
+  if (dragFrom < 0 || !q) return;
+  e.preventDefault();
+  const from = dragFrom;
+  dragFrom = -1;
+  moveInQueue(from, +q.dataset.i);
+});
+document.addEventListener('dragend', () => {
+  dragFrom = -1;
+  document.querySelectorAll('.queue .q.over, .queue .q.dragging').forEach((x) => x.classList.remove('over', 'after', 'dragging'));
+});
 
 // Comandos que valem para quem estiver tocando
 const cmd = {
@@ -477,6 +671,7 @@ function renderView() {
         ${segRow(tx('set.appearance'), tx('set.appearanceHint'), themeBtn('auto', tx('theme.auto')) + themeBtn('light', tx('theme.light')) + themeBtn('dark', tx('theme.dark')))}
         ${segRow(tx('set.language'), tx('set.languageHint'), langBtn('auto', tx('theme.auto')) + Object.entries(NAMES).map(([k, n]) => langBtn(k, n)).join(''))}
         ${sw('hiRes', S.settings.hiRes, tx('set.hiRes'), tx('set.hiResHint'))}
+        ${sw('onlineLyrics', S.onlineLyrics, tx('set.lyrics'), tx('set.lyricsHint'))}
         ${sw('startup', S.settings.startup, tx('set.startup'), '')}
         ${sw('pinned', S.settings.pinned, tx('set.pinned'), '')}
       </div>
@@ -604,13 +799,18 @@ function renderNow(i, swap) {
   const el = $('#now');
   el.hidden = !S.nowOpen;
   if (!S.nowOpen) return;
-  const upcoming = i?.mode === 'local' ? S.queue.slice(S.index + 1, S.index + 7) : [];
+  const upcoming = i?.mode === 'local' ? S.queue.slice(S.index + 1, S.index + 51) : [];
+  const showLyrics = !!i && S.lyricsOn;
+  if (showLyrics) wantLyrics(i);
+  // A letra que já está na tela continua a mesma (sem perder a rolagem) quando só o tempo mudou
+  const keep = el.querySelector('.lyr-scroll');
   el.innerHTML = `
     <div class="bg" style="${i?.cover ? `background-image:url('${esc(i.cover)}')` : ''}"></div>
     <div class="veil"></div>
     <div class="layer">
       <div class="now-top drag">
         <button type="button" class="pill-btn" data-act="close-now">${I.down}${tx('now.library')}</button>
+        ${i ? `<button type="button" class="pill-btn lyr-btn${S.lyricsOn ? ' on' : ''}" data-act="lyrics" aria-pressed="${S.lyricsOn}">${I.lyrics}${tx('now.lyrics')}</button>` : ''}
         <span class="now-source">${i ? `${i.playing ? tx('now.playing') : tx('now.paused')} · ${esc(i.source)}` : tx('now.nothing')}</span>
         <div class="win-buttons" style="margin-left:8px">
           <button type="button" class="win" data-win="mini" aria-label="${tx('win.mini')}">${I.mini}</button>
@@ -618,7 +818,7 @@ function renderNow(i, swap) {
           <button type="button" class="win close" data-win="close" aria-label="${tx('win.close')}">${I.close}</button>
         </div>
       </div>
-      <div class="now-main">
+      <div class="now-main${showLyrics ? ' with-lyrics' : ''}">
         <div class="now-cover">${i?.cover ? `<img src="${esc(i.cover)}" alt="">` : MARK}</div>
         <div class="now-info${swap ? ' swap' : ''}">
           <h1>${esc(i?.title || tx('now.nothing'))}</h1>
@@ -628,15 +828,21 @@ function renderNow(i, swap) {
               <div class="times"><span class="js-pos">${fmt(i.position)}</span><span class="js-dur">${fmt(i.duration)}</span></div></div>
             ${controlsHtml(i, true)}` : ''}
         </div>
-        ${i?.mode === 'local' ? `<aside class="queue" aria-label="${tx('now.upNext')}"><h2>${tx('now.upNext')}</h2>
+        ${showLyrics ? `<aside class="lyrics-panel" aria-label="${tx('now.lyrics')}">${lyricsHtml()}</aside>`
+          : i?.mode === 'local' ? `<aside class="queue" aria-label="${tx('now.upNext')}"><h2>${tx('now.upNext')}</h2>
           ${upcoming.length ? upcoming.map((t, k) => {
             const a = S.albumById.get(t.albumId);
-            return `<button type="button" class="q" data-act="jump" data-i="${S.index + 1 + k}">${coverHtml(a?.cover)}
-              <span style="min-width:0;display:flex;flex-direction:column"><span class="t1" style="font-size:14px">${esc(t.title)}</span><span class="t2">${esc(t.artist || a?.artist || '')}</span></span></button>`;
+            const n = S.index + 1 + k;
+            return `<div class="q" data-act="jump" data-i="${n}" draggable="true" role="button" tabindex="0" title="${tx('queue.dragHint')}">${coverHtml(a?.cover)}
+              <span class="q-text"><span class="t1" style="font-size:14px">${esc(t.title)}</span><span class="t2">${esc(t.artist || a?.artist || '')}</span></span>
+              <button type="button" class="q-x" data-act="dequeue" data-i="${n}" aria-label="${tx('queue.remove')}">${I.close}</button></div>`;
           }).join('') : `<span class="empty-q">${tx('now.endOfQueue')}</span>`}
         </aside>` : ''}
       </div>
     </div>`;
+  const fresh = el.querySelector('.lyr-scroll');
+  if (keep && fresh && keep.dataset.key === fresh.dataset.key) fresh.replaceWith(keep);
+  else if (fresh) paintLyrics(i?.position || 0, true);
 }
 
 function renderMini(i) {
@@ -678,6 +884,7 @@ function tick(force = false) {
     s.querySelector('.knob').style.left = r * 100 + '%';
   });
   document.querySelectorAll('.js-line').forEach((e) => { e.style.width = r * 100 + '%'; });
+  if (S.nowOpen && S.lyricsOn) paintLyrics(i.position);
 }
 (function loop() { tick(); requestAnimationFrame(loop); })();
 
@@ -714,6 +921,13 @@ document.addEventListener('click', (e) => {
     case 'like': cmd.like(); break;
     case 'mute': audio.muted = !audio.muted; renderPlayback(); break;
     case 'jump': S.index = +d.i; loadCurrent(true); break;
+    case 'dequeue': dequeue(+d.i); break;
+    case 'lyrics': S.lyricsOn = !S.lyricsOn; save('lyricsOn', S.lyricsOn); renderPlayback(); break;
+    case 'lyr-seek': {
+      const i = info();
+      if (i?.canSeek && i.duration) { lyrUserUntil = 0; cmd.seek(+d.t / i.duration); }
+      break;
+    }
     case 'open-now': openNow(true); break;
     case 'close-now': openNow(false); break;
     case 'add-folder': host.send({ type: 'folders', action: 'add' }); break;
@@ -724,6 +938,12 @@ document.addEventListener('click', (e) => {
     case 'theme': S.theme = d.theme; save('theme', S.theme); applyTheme(); renderView(); break;
     case 'lang': S.lang = d.lang; save('lang', S.lang); applyLang(); renderAll(); break;
     case 'setting': {
+      if (d.key === 'onlineLyrics') {
+        S.onlineLyrics = !S.onlineLyrics; save('onlineLyrics', S.onlineLyrics);
+        el.setAttribute('aria-checked', String(S.onlineLyrics));
+        lyricCache.clear(); S.lyr = { key: '', state: 'idle', lines: null, plain: '' };
+        break;
+      }
       const val = !S.settings[d.key];
       S.settings[d.key] = val;
       el.setAttribute('aria-checked', String(val));
@@ -743,6 +963,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     const li = e.target.closest?.('[data-act="play"]');
     if (li) playList(S.lists[li.dataset.list] || [], +li.dataset.i);
+    const q = e.target.closest?.('.queue .q');
+    if (q && e.target === q) { S.index = +q.dataset.i; loadCurrent(true); }
   }
 });
 function listFor(key) {
@@ -805,6 +1027,7 @@ document.addEventListener('pointerup', (e) => {
 document.addEventListener('wheel', (e) => {
   if (!e.target.closest('.bar, .now, .mini')) return;
   if (e.target.closest('.queue')) return;
+  if (e.target.closest('.lyrics-panel')) { lyrUserUntil = performance.now() + 4000; return; }
   const i = info();
   if (!i) return;
   const cur = i.mode === 'spotify' ? (S.spotify.volume ?? 1) : S.volume;
@@ -833,7 +1056,9 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowLeft') { cmd.previous(); e.preventDefault(); }
   else if (e.key.toLowerCase() === 'm') host.send({ type: 'window', action: 'mini' });
   else if (e.key.toLowerCase() === 't') host.send({ type: 'window', action: 'pin' });
+  else if (e.key === 'Escape' && document.getElementById('ctx')) closeMenu();
   else if (e.key === 'Escape' && S.nowOpen) openNow(false);
+  else if (e.key.toLowerCase() === 'l' && S.nowOpen) { S.lyricsOn = !S.lyricsOn; save('lyricsOn', S.lyricsOn); renderPlayback(); }
   else if (e.key === 'Backspace' && S.history.length) goBack();
 });
 
@@ -865,6 +1090,7 @@ host.on((msg) => {
       if (S.view.name === 'ajustes') renderView();
       break;
     case 'open': openFiles(msg.tracks || []); break;
+    case 'lyrics': gotLyrics(msg); break;
     case 'media-key':
       if (msg.key === 'toggle') cmd.toggle();
       else if (msg.key === 'next') cmd.next();
@@ -878,6 +1104,7 @@ const params = new URLSearchParams(location.search);
 const tela = params.get('tela');
 if (params.get('tema')) S.theme = params.get('tema');
 if (params.get('idioma')) S.lang = params.get('idioma');
+if (params.get('letra')) S.lyricsOn = params.get('letra') === '1';
 applyTheme();
 applyLang();
 renderAll();

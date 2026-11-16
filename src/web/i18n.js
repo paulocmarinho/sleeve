@@ -2,6 +2,11 @@
 // traduza os textos e acrescente o código em LANGS e em NAMES.
 
 const pt = {
+  'now.lyrics': 'Letra', 'lyrics.loading': 'Procurando a letra…', 'lyrics.none': 'Não achei a letra desta música.',
+  'queue.playNext': 'Tocar a seguir', 'queue.add': 'Adicionar à fila', 'queue.remove': 'Tirar da fila',
+  'queue.toastNext': '"{t}" toca a seguir', 'queue.toastAdd': '"{t}" foi para a fila', 'queue.dragHint': 'Arraste para mudar a ordem',
+  'menu.goAlbum': 'Ir para o álbum', 'menu.goArtist': 'Ir para o artista',
+  'set.lyrics': 'Buscar letras na internet', 'set.lyricsHint': 'Quando a música não traz a letra, procura no LRCLIB. Envia o nome da música e do artista.',
   'nav.albums': 'Álbuns', 'nav.artists': 'Artistas', 'nav.tracks': 'Músicas', 'nav.likes': 'Curtidas', 'nav.folders': 'Pastas', 'nav.settings': 'Ajustes',
   'src.title': 'Fontes', 'src.files': 'Arquivos', 'src.reading': 'lendo…', 'src.readingN': 'lendo… {n}', 'src.tracksN': '{n} faixas',
   'sp.closed': 'fechado', 'sp.connected': 'conectado', 'sp.playing': 'tocando',
@@ -24,7 +29,7 @@ const pt = {
   'set.startup': 'Iniciar com o Windows', 'set.pinned': 'Sempre no topo',
   'set.updates': 'Atualizações', 'set.restart': 'Reiniciar e atualizar', 'set.check': 'Procurar',
   'set.autoUpdate': 'Atualizar automaticamente', 'set.autoUpdateHint': 'Ao abrir, o Sleeve procura a versão mais nova no GitHub e baixa sozinho.',
-  'set.shortcuts': 'Atalhos: espaço toca e pausa, ← e → trocam de faixa, M abre o mini player, Esc fecha o tocando agora.',
+  'set.shortcuts': 'Atalhos: espaço toca e pausa, ← e → trocam de faixa, M abre o mini player, L mostra a letra, Esc fecha o tocando agora. Botão direito numa música põe na fila.',
   'search.results': 'Resultados', 'search.none': 'Nada encontrado para "{q}".',
   'upd.checking': 'Procurando atualizações…', 'upd.downloading': 'Baixando a versão {v}…', 'upd.ready': 'A versão {v} está pronta. Ela entra quando o Sleeve reiniciar.',
   'upd.none': 'Você está na versão mais nova.', 'upd.error': 'Não deu para atualizar agora. Tente de novo mais tarde.', 'upd.idle': 'O Sleeve procura atualizações no GitHub.',
@@ -37,6 +42,11 @@ const pt = {
 };
 
 const en = {
+  'now.lyrics': 'Lyrics', 'lyrics.loading': 'Looking for the lyrics…', 'lyrics.none': "Couldn't find lyrics for this song.",
+  'queue.playNext': 'Play next', 'queue.add': 'Add to queue', 'queue.remove': 'Remove from queue',
+  'queue.toastNext': '"{t}" plays next', 'queue.toastAdd': '"{t}" added to the queue', 'queue.dragHint': 'Drag to reorder',
+  'menu.goAlbum': 'Go to album', 'menu.goArtist': 'Go to artist',
+  'set.lyrics': 'Find lyrics online', 'set.lyricsHint': "When a song has no lyrics, looks them up on LRCLIB. Sends the song and artist name.",
   'nav.albums': 'Albums', 'nav.artists': 'Artists', 'nav.tracks': 'Songs', 'nav.likes': 'Liked', 'nav.folders': 'Folders', 'nav.settings': 'Settings',
   'src.title': 'Sources', 'src.files': 'Files', 'src.reading': 'reading…', 'src.readingN': 'reading… {n}', 'src.tracksN': '{n} songs',
   'sp.closed': 'closed', 'sp.connected': 'connected', 'sp.playing': 'playing',
@@ -59,7 +69,7 @@ const en = {
   'set.startup': 'Start with Windows', 'set.pinned': 'Always on top',
   'set.updates': 'Updates', 'set.restart': 'Restart and update', 'set.check': 'Check',
   'set.autoUpdate': 'Update automatically', 'set.autoUpdateHint': 'When it opens, Sleeve looks for the newest version on GitHub and downloads it on its own.',
-  'set.shortcuts': 'Shortcuts: space plays and pauses, ← and → change songs, M opens the mini player, Esc closes now playing.',
+  'set.shortcuts': 'Shortcuts: space plays and pauses, ← and → change songs, M opens the mini player, L shows lyrics, Esc closes now playing. Right-click a song to queue it.',
   'search.results': 'Results', 'search.none': 'Nothing found for "{q}".',
   'upd.checking': 'Checking for updates…', 'upd.downloading': 'Downloading version {v}…', 'upd.ready': 'Version {v} is ready. It takes effect when Sleeve restarts.',
   'upd.none': 'You have the latest version.', 'upd.error': "Couldn't update right now. Try again later.", 'upd.idle': 'Sleeve checks for updates on GitHub.',
@@ -72,6 +82,11 @@ const en = {
 };
 
 const es = {
+  'now.lyrics': 'Letra', 'lyrics.loading': 'Buscando la letra…', 'lyrics.none': 'No encontré la letra de esta canción.',
+  'queue.playNext': 'Reproducir a continuación', 'queue.add': 'Añadir a la cola', 'queue.remove': 'Quitar de la cola',
+  'queue.toastNext': '"{t}" suena a continuación', 'queue.toastAdd': '"{t}" se añadió a la cola', 'queue.dragHint': 'Arrastra para cambiar el orden',
+  'menu.goAlbum': 'Ir al álbum', 'menu.goArtist': 'Ir al artista',
+  'set.lyrics': 'Buscar letras en internet', 'set.lyricsHint': 'Cuando la canción no trae la letra, la busca en LRCLIB. Envía el nombre de la canción y del artista.',
   'nav.albums': 'Álbumes', 'nav.artists': 'Artistas', 'nav.tracks': 'Canciones', 'nav.likes': 'Favoritas', 'nav.folders': 'Carpetas', 'nav.settings': 'Ajustes',
   'src.title': 'Fuentes', 'src.files': 'Archivos', 'src.reading': 'leyendo…', 'src.readingN': 'leyendo… {n}', 'src.tracksN': '{n} canciones',
   'sp.closed': 'cerrado', 'sp.connected': 'conectado', 'sp.playing': 'sonando',
@@ -94,7 +109,7 @@ const es = {
   'set.startup': 'Iniciar con Windows', 'set.pinned': 'Siempre visible',
   'set.updates': 'Actualizaciones', 'set.restart': 'Reiniciar y actualizar', 'set.check': 'Buscar',
   'set.autoUpdate': 'Actualizar automáticamente', 'set.autoUpdateHint': 'Al abrirse, Sleeve busca la versión más nueva en GitHub y la descarga solo.',
-  'set.shortcuts': 'Atajos: espacio reproduce y pausa, ← y → cambian de canción, M abre el minirreproductor, Esc cierra la reproducción.',
+  'set.shortcuts': 'Atajos: espacio reproduce y pausa, ← y → cambian de canción, M abre el minirreproductor, L muestra la letra, Esc cierra la reproducción. Clic derecho en una canción para ponerla en la cola.',
   'search.results': 'Resultados', 'search.none': 'No se encontró nada para "{q}".',
   'upd.checking': 'Buscando actualizaciones…', 'upd.downloading': 'Descargando la versión {v}…', 'upd.ready': 'La versión {v} está lista. Se aplica cuando Sleeve se reinicie.',
   'upd.none': 'Tienes la versión más reciente.', 'upd.error': 'No se pudo actualizar ahora. Inténtalo más tarde.', 'upd.idle': 'Sleeve busca actualizaciones en GitHub.',
