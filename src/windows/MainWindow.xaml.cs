@@ -126,6 +126,14 @@ public partial class MainWindow : Window
         _core.WebMessageReceived += OnMessage;
         _core.NewWindowRequested += (_, a) => a.Handled = true; // nunca abre janelas de navegador
         MapFolders();
+        try
+        {
+            // Cópias de FLAC consertadas (veja FlacRepair)
+            Directory.CreateDirectory(FlacRepair.Dir);
+            _core.SetVirtualHostNameToFolderMapping(FlacRepair.Host, FlacRepair.Dir, CoreWebView2HostResourceAccessKind.Allow);
+            _ = Task.Run(FlacRepair.CleanUp);
+        }
+        catch (Exception ex) { App.Log(ex); }
         _core.Navigate("https://app.sleeve/index.html");
 
         _media.Changed += () => Dispatcher.InvokeAsync(() =>
@@ -287,6 +295,20 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case "repair":
+            {
+                var id = Str(m, "id");
+                string? fixedUrl = null;
+                try
+                {
+                    var path = PathFromUrl(Str(m, "url"));
+                    var name = path is null ? null : await Task.Run(() => FlacRepair.Repair(path));
+                    if (name is not null) fixedUrl = $"https://{FlacRepair.Host}/{name}";
+                }
+                catch (Exception ex) { App.Log(ex); }
+                Post(new { type = "repaired", id, url = fixedUrl });
+                break;
+            }
             case "lyrics":
             {
                 var key = Str(m, "key");

@@ -2,6 +2,7 @@
 // traduza os textos e acrescente o código em LANGS e em NAMES.
 
 const pt = {
+  'play.error': 'Não deu para tocar "{t}".',
   'now.lyrics': 'Letra', 'lyrics.loading': 'Procurando a letra…', 'lyrics.none': 'Não achei a letra desta música.',
   'queue.playNext': 'Tocar a seguir', 'queue.add': 'Adicionar à fila', 'queue.remove': 'Tirar da fila',
   'queue.toastNext': '"{t}" toca a seguir', 'queue.toastAdd': '"{t}" foi para a fila', 'queue.dragHint': 'Arraste para mudar a ordem',
@@ -42,6 +43,7 @@ const pt = {
 };
 
 const en = {
+  'play.error': 'Couldn\'t play "{t}".',
   'now.lyrics': 'Lyrics', 'lyrics.loading': 'Looking for the lyrics…', 'lyrics.none': "Couldn't find lyrics for this song.",
   'queue.playNext': 'Play next', 'queue.add': 'Add to queue', 'queue.remove': 'Remove from queue',
   'queue.toastNext': '"{t}" plays next', 'queue.toastAdd': '"{t}" added to the queue', 'queue.dragHint': 'Drag to reorder',
@@ -82,6 +84,7 @@ const en = {
 };
 
 const es = {
+  'play.error': 'No se pudo reproducir "{t}".',
   'now.lyrics': 'Letra', 'lyrics.loading': 'Buscando la letra…', 'lyrics.none': 'No encontré la letra de esta canción.',
   'queue.playNext': 'Reproducir a continuación', 'queue.add': 'Añadir a la cola', 'queue.remove': 'Quitar de la cola',
   'queue.toastNext': '"{t}" suena a continuación', 'queue.toastAdd': '"{t}" se añadió a la cola', 'queue.dragHint': 'Arrastra para cambiar el orden',

@@ -521,9 +521,26 @@ audio.addEventListener('pause', () => { reportLocal(); renderPlayback(); });
 audio.addEventListener('ended', () => next(true));
 audio.addEventListener('loadedmetadata', () => tick(true));
 audio.addEventListener('error', () => {
-  // Arquivo que não abre (apagado, formato que o sistema não toca): pula para a próxima
-  if (audio.src && S.queue.length > 1) setTimeout(() => next(true), 400);
+  const t = current();
+  if (!t?.url || !audio.src) return;
+  // Primeiro pede ao sistema para consertar (ex.: FLAC com capa defeituosa); só depois desiste
+  if (!t.repairTried) { t.repairTried = true; host.send({ type: 'repair', id: t.id, url: t.url }); return; }
+  playFailed(t);
 });
+function playFailed(t) {
+  toast(tx('play.error', { t: t.title }));
+  // Arquivo que não abre (apagado, formato que o sistema não toca): pula para a próxima
+  if (S.index < S.queue.length - 1) setTimeout(() => next(true), 1500);
+  else renderPlayback();
+}
+function gotRepair(msg) {
+  const t = S.queue.find((x) => x.id === msg.id) || S.trackById.get(msg.id);
+  if (!t) return;
+  if (msg.url) {
+    t.url = msg.url;
+    if (current() === t) { audio.src = t.url; audio.play().catch(() => {}); }
+  } else if (current() === t) playFailed(t);
+}
 function reportLocal() {
   const t = current();
   host.send({ type: 'local', title: t?.title || '', artist: t?.artist || '', playing: !!t && !audio.paused });
@@ -1091,6 +1108,7 @@ host.on((msg) => {
       break;
     case 'open': openFiles(msg.tracks || []); break;
     case 'lyrics': gotLyrics(msg); break;
+    case 'repaired': gotRepair(msg); break;
     case 'media-key':
       if (msg.key === 'toggle') cmd.toggle();
       else if (msg.key === 'next') cmd.next();

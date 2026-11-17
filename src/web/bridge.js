@@ -15,6 +15,7 @@
 //   {type:'folders', action:'add'|'remove'|'rescan', path?}
 //   {type:'setting', key, value}
 //   {type:'lyrics', key, title, artist, album, duration, url, online}  pede a letra; volta {type:'lyrics', key, synced, plain}
+//   {type:'repair', id, url}               arquivo não abriu; volta {type:'repaired', id, url|null} com uma cópia tocável
 //   {type:'theme', dark}                  tema da interface, para a janela acompanhar
 //   {type:'language', lang}               idioma da interface (pt-BR, en, es), para a bandeja e os avisos
 //   {type:'update', action:'check'|'restart'|'page'}
@@ -56,6 +57,7 @@ function demoHost() {
         const sp = new URLSearchParams(location.search).get('spotify');
         if (sp) emit({ type: 'spotify', info: demoSpotify(sp === 'tocando') });
       }
+      if (msg.type === 'repair') listeners.forEach((fn) => fn({ type: 'repaired', id: msg.id, url: null }));
       if (msg.type === 'lyrics') {
         // Letra de mentira, só para ver o painel funcionando no navegador
         const versos = ['Luz de fim de tarde na janela', 'O disco gira devagar', '', 'Cada faixa conta uma história',
