@@ -16,6 +16,8 @@
 //   {type:'setting', key, value}
 //   {type:'lyrics', key, title, artist, album, duration, url, online}  pede a letra; volta {type:'lyrics', key, synced, plain}
 //   {type:'repair', id, url}               arquivo não abriu; volta {type:'repaired', id, url|null} com uma cópia tocável
+//   {type:'artistPhotos', online, artists:[{name, albums, tracks, urls}]}  volta um {type:'artistPhoto', name, url|null} por artista
+//   {type:'playstate', playing, canPrevious, canNext}  para os botões da barra de tarefas
 //   {type:'theme', dark}                  tema da interface, para a janela acompanhar
 //   {type:'language', lang}               idioma da interface (pt-BR, en, es), para a bandeja e os avisos
 //   {type:'update', action:'check'|'restart'|'page'}
@@ -54,8 +56,14 @@ function demoHost() {
           emit({ type: 'open', tracks: [{ id: 'arquivo-1', title: 'Good Morning', artist: 'Kanye West', album: 'Graduation', cover: null, color: '#8E44AD', duration: 195, url: '' }] });
           emit({ type: 'library', ...demoLibrary(), scanning: false }); // a biblioteca atualiza depois: a música aberta continua
         }
+        const faixas = new URLSearchParams(location.search).get('faixas'); // ?faixas=a.flac,b.flac: arquivos de teste
+        if (faixas) emit({ type: 'open', tracks: faixas.split(',').map((u, k) => ({ id: 'teste-' + k, title: 'Teste ' + (k + 1), artist: 'Sleeve', album: 'Teste', cover: null, color: '#7C3AED', duration: 0, url: u })) });
         const sp = new URLSearchParams(location.search).get('spotify');
         if (sp) emit({ type: 'spotify', info: demoSpotify(sp === 'tocando') });
+      }
+      if (msg.type === 'artistPhotos') {
+        // No navegador de teste: a capa do primeiro álbum faz o papel da foto
+        msg.artists.forEach((ar, k) => setTimeout(() => listeners.forEach((fn) => fn({ type: 'artistPhoto', name: ar.name, url: null })), 100 + k * 30));
       }
       if (msg.type === 'repair') listeners.forEach((fn) => fn({ type: 'repaired', id: msg.id, url: null }));
       if (msg.type === 'lyrics') {

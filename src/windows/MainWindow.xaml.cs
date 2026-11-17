@@ -51,6 +51,7 @@ public partial class MainWindow : Window
 
         Strings.Set(_settings.Language);
         _tray = new TrayIcon();
+        SetupTaskbar();
         _tray.ToggleWindow += ToggleFromTray;
         _tray.PlayPause += () => Post(new { type = "media-key", key = "toggle" });
         _tray.Next += () => Post(new { type = "media-key", key = "next" });
@@ -181,6 +182,11 @@ public partial class MainWindow : Window
                 var file = Path.Combine(LibraryService.CoverDir, Path.GetFileName(path));
                 if (File.Exists(file)) data = File.ReadAllBytes(file);
             }
+            else if (path.StartsWith("artista/", StringComparison.Ordinal))
+            {
+                var file = Path.Combine(ArtistPhotos.Dir, Path.GetFileName(path));
+                if (File.Exists(file)) data = File.ReadAllBytes(file);
+            }
             else
             {
                 data = WebAssets.Read(path);
@@ -295,6 +301,28 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case "artistPhotos":
+            {
+                if (!m.TryGetProperty("artists", out var list) || list.ValueKind != JsonValueKind.Array) break;
+                var online = Bool(m, "online");
+                foreach (var ar in list.EnumerateArray().ToList())
+                {
+                    var name = Str(ar, "name");
+                    string? url = null;
+                    try
+                    {
+                        var folders = Strs(ar, "urls").Select(u => PathFromUrl(u)).OfType<string>()
+                            .Select(p => Path.GetDirectoryName(p)).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                        url = await ArtistPhotos.GetAsync(name, Strs(ar, "albums"), Strs(ar, "tracks"), folders, online);
+                    }
+                    catch (Exception ex) { App.Log(ex); }
+                    Post(new { type = "artistPhoto", name, url });
+                }
+                break;
+            }
+            case "playstate":
+                UpdateTaskbar(Bool(m, "playing"), Bool(m, "canPrevious"), Bool(m, "canNext"));
+                break;
             case "repair":
             {
                 var id = Str(m, "id");
@@ -328,7 +356,7 @@ public partial class MainWindow : Window
             }
             case "language":
                 var lang = Str(m, "lang");
-                if (Strings.Set(lang)) _tray.Relabel();
+                if (Strings.Set(lang)) { _tray.Relabel(); RelabelTaskbar(); }
                 if (_settings.Language != Strings.Lang) { _settings.Language = Strings.Lang; _settings.Save(); }
                 break;
             case "theme":
@@ -541,6 +569,69 @@ public partial class MainWindow : Window
 
     private string[]? _pendingOpen;
     private readonly Dictionary<string, string> _fileHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    private static List<string> Strs(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
+            ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString() ?? "").ToList()
+            : new List<string>();
+
+    // ---------- Botões na miniatura da barra de tarefas ----------
+    private System.Windows.Shell.ThumbButtonInfo? _tbPrev, _tbPlay, _tbNext;
+    private bool _tbPlaying;
+
+    private void SetupTaskbar()
+    {
+        System.Windows.Shell.ThumbButtonInfo Button(string glyph, string label, string key)
+        {
+            var b = new System.Windows.Shell.ThumbButtonInfo { ImageSource = Glyph(glyph), Description = label, IsEnabled = false };
+            b.Click += (_, _) => Post(new { type = "media-key", key });
+            return b;
+        }
+        _tbPrev = Button(GlyphPrev, Strings.Get("tb.prev"), "previous");
+        _tbPlay = Button(GlyphPlay, Strings.Get("tb.play"), "toggle");
+        _tbNext = Button(GlyphNext, Strings.Get("tb.next"), "next");
+        TaskbarItemInfo = new System.Windows.Shell.TaskbarItemInfo();
+        TaskbarItemInfo.ThumbButtonInfos.Add(_tbPrev);
+        TaskbarItemInfo.ThumbButtonInfos.Add(_tbPlay);
+        TaskbarItemInfo.ThumbButtonInfos.Add(_tbNext);
+    }
+
+    private void UpdateTaskbar(bool playing, bool canPrevious, bool canNext)
+    {
+        if (_tbPlay is null || _tbPrev is null || _tbNext is null) return;
+        _tbPlaying = playing;
+        _tbPrev.IsEnabled = canPrevious;
+        _tbNext.IsEnabled = canNext;
+        _tbPlay.IsEnabled = canPrevious || canNext;
+        _tbPlay.ImageSource = Glyph(playing ? GlyphPause : GlyphPlay);
+        _tbPlay.Description = Strings.Get(playing ? "tb.pause" : "tb.play");
+    }
+
+    private void RelabelTaskbar()
+    {
+        if (_tbPrev is null || _tbPlay is null || _tbNext is null) return;
+        _tbPrev.Description = Strings.Get("tb.prev");
+        _tbNext.Description = Strings.Get("tb.next");
+        _tbPlay.Description = Strings.Get(_tbPlaying ? "tb.pause" : "tb.play");
+    }
+
+    private const string GlyphPlay = "M8,5 L19,12 L8,19 Z";
+    private const string GlyphPause = "M7,5 H10.5 V19 H7 Z M13.5,5 H17 V19 H13.5 Z";
+    private const string GlyphPrev = "M6,5 H8 V19 H6 Z M18,5 L9,12 L18,19 Z";
+    private const string GlyphNext = "M16,5 H18 V19 H16 Z M6,5 L15,12 L6,19 Z";
+
+    private static System.Windows.Media.ImageSource Glyph(string data)
+    {
+        var group = new System.Windows.Media.DrawingGroup();
+        // Quadro transparente de 24x24 para todos os ícones terem o mesmo tamanho
+        group.Children.Add(new System.Windows.Media.GeometryDrawing(System.Windows.Media.Brushes.Transparent, null,
+            new System.Windows.Media.RectangleGeometry(new Rect(0, 0, 24, 24))));
+        group.Children.Add(new System.Windows.Media.GeometryDrawing(System.Windows.Media.Brushes.White, null,
+            System.Windows.Media.Geometry.Parse(data)));
+        var image = new System.Windows.Media.DrawingImage(group);
+        image.Freeze();
+        return image;
+    }
 
     /// <summary>Caminho no disco de um endereço interno de música (musicaN.sleeve ou arquivoN.sleeve).</summary>
     private string? PathFromUrl(string url)

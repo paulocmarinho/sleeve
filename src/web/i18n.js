@@ -2,6 +2,8 @@
 // traduza os textos e acrescente o código em LANGS e em NAMES.
 
 const pt = {
+  'lib.continue': 'Continuar ouvindo', 'lib.allAlbums': 'Todos os álbuns', 'artist.eyebrow': 'Artista',
+  'set.artistPhotos': 'Fotos de artistas', 'set.artistPhotosHint': 'Usa o artist.jpg da pasta do artista; se não tiver, busca a foto no Deezer. Envia o nome do artista.',
   'play.error': 'Não deu para tocar "{t}".',
   'now.lyrics': 'Letra', 'lyrics.loading': 'Procurando a letra…', 'lyrics.none': 'Não achei a letra desta música.',
   'queue.playNext': 'Tocar a seguir', 'queue.add': 'Adicionar à fila', 'queue.remove': 'Tirar da fila',
@@ -43,6 +45,8 @@ const pt = {
 };
 
 const en = {
+  'lib.continue': 'Continue listening', 'lib.allAlbums': 'All albums', 'artist.eyebrow': 'Artist',
+  'set.artistPhotos': 'Artist photos', 'set.artistPhotosHint': "Uses artist.jpg from the artist's folder; if there is none, gets the photo from Deezer. Sends the artist name.",
   'play.error': 'Couldn\'t play "{t}".',
   'now.lyrics': 'Lyrics', 'lyrics.loading': 'Looking for the lyrics…', 'lyrics.none': "Couldn't find lyrics for this song.",
   'queue.playNext': 'Play next', 'queue.add': 'Add to queue', 'queue.remove': 'Remove from queue',
@@ -84,6 +88,8 @@ const en = {
 };
 
 const es = {
+  'lib.continue': 'Seguir escuchando', 'lib.allAlbums': 'Todos los álbumes', 'artist.eyebrow': 'Artista',
+  'set.artistPhotos': 'Fotos de artistas', 'set.artistPhotosHint': 'Usa el artist.jpg de la carpeta del artista; si no hay, busca la foto en Deezer. Envía el nombre del artista.',
   'play.error': 'No se pudo reproducir "{t}".',
   'now.lyrics': 'Letra', 'lyrics.loading': 'Buscando la letra…', 'lyrics.none': 'No encontré la letra de esta canción.',
   'queue.playNext': 'Reproducir a continuación', 'queue.add': 'Añadir a la cola', 'queue.remove': 'Quitar de la cola',

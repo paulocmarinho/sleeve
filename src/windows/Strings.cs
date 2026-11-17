@@ -15,6 +15,7 @@ public static class Strings
     {
         ["pt-BR"] = new()
         {
+            ["tb.prev"] = "Anterior", ["tb.play"] = "Tocar", ["tb.pause"] = "Pausar", ["tb.next"] = "Próxima",
             ["tray.show"] = "Mostrar / ocultar", ["tray.play"] = "Tocar / pausar", ["tray.next"] = "Próxima",
             ["tray.mini"] = "Modo mini", ["tray.pin"] = "Sempre no topo", ["tray.hiRes"] = "Capa em alta resolução",
             ["tray.startup"] = "Iniciar com o Windows", ["tray.exit"] = "Sair",
@@ -25,6 +26,7 @@ public static class Strings
         },
         ["en"] = new()
         {
+            ["tb.prev"] = "Previous", ["tb.play"] = "Play", ["tb.pause"] = "Pause", ["tb.next"] = "Next",
             ["tray.show"] = "Show / hide", ["tray.play"] = "Play / pause", ["tray.next"] = "Next",
             ["tray.mini"] = "Mini player", ["tray.pin"] = "Always on top", ["tray.hiRes"] = "High-resolution covers",
             ["tray.startup"] = "Start with Windows", ["tray.exit"] = "Quit",
@@ -35,6 +37,7 @@ public static class Strings
         },
         ["es"] = new()
         {
+            ["tb.prev"] = "Anterior", ["tb.play"] = "Reproducir", ["tb.pause"] = "Pausar", ["tb.next"] = "Siguiente",
             ["tray.show"] = "Mostrar / ocultar", ["tray.play"] = "Reproducir / pausar", ["tray.next"] = "Siguiente",
             ["tray.mini"] = "Minirreproductor", ["tray.pin"] = "Siempre visible", ["tray.hiRes"] = "Portadas en alta resolución",
             ["tray.startup"] = "Iniciar con Windows", ["tray.exit"] = "Salir",
