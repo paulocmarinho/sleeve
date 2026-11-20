@@ -320,6 +320,69 @@ public partial class MainWindow : Window
                 }
                 break;
             }
+            case "loudness":
+            {
+                if (!m.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) break;
+                foreach (var it in items.EnumerateArray().ToList())
+                {
+                    var id = Str(it, "id");
+                    double? gain = null;
+                    try
+                    {
+                        var path = PathFromUrl(Str(it, "url"));
+                        if (path is not null) gain = await Loudness.GainAsync(path);
+                    }
+                    catch (Exception ex) { App.Log(ex); }
+                    Post(new { type = "loudness", id, gain });
+                }
+                break;
+            }
+            case "playlistImport":
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Playlist (*.m3u, *.m3u8)|*.m3u;*.m3u8", Title = "Sleeve" };
+                if (dialog.ShowDialog(this) != true) break;
+                try
+                {
+                    var file = dialog.FileName;
+                    var dir = Path.GetDirectoryName(file) ?? "";
+                    var ids = new List<string>();
+                    foreach (var raw in File.ReadAllLines(file))
+                    {
+                        var line = raw.Trim().TrimStart('\uFEFF');
+                        if (line.Length == 0 || line.StartsWith('#')) continue;
+                        if (Uri.TryCreate(line, UriKind.Absolute, out var u) && u.IsFile) line = u.LocalPath;
+                        var full = Path.GetFullPath(Path.IsPathRooted(line) ? line : Path.Combine(dir, line.Replace('/', Path.DirectorySeparatorChar)));
+                        ids.Add(LibraryService.Hash(full));
+                    }
+                    Post(new { type = "playlistImported", name = Path.GetFileNameWithoutExtension(file), ids });
+                }
+                catch (Exception ex)
+                {
+                    App.Log(ex);
+                    Post(new { type = "playlistImported", name = "", ids = Array.Empty<string>() });
+                }
+                break;
+            }
+            case "playlistExport":
+            {
+                var name = string.Join("_", Str(m, "name").Split(Path.GetInvalidFileNameChars())).Trim();
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Playlist (*.m3u8)|*.m3u8|Playlist (*.m3u)|*.m3u",
+                    FileName = name.Length > 0 ? name : "Playlist",
+                    Title = "Sleeve",
+                };
+                if (dialog.ShowDialog(this) != true) break;
+                try
+                {
+                    var lines = new List<string> { "#EXTM3U" };
+                    lines.AddRange(Strs(m, "urls").Select(u => PathFromUrl(u)).OfType<string>());
+                    File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));
+                    Post(new { type = "playlistExported", path = dialog.FileName });
+                }
+                catch (Exception ex) { App.Log(ex); }
+                break;
+            }
             case "playstate":
                 UpdateTaskbar(Bool(m, "playing"), Bool(m, "canPrevious"), Bool(m, "canNext"));
                 break;

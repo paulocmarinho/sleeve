@@ -15,6 +15,8 @@ O Sleeve toca os seus arquivos de música e mostra e controla o Spotify, num vis
 - **Sem pausa entre faixas**: a próxima música já fica carregada, então álbuns que emendam uma faixa na outra tocam sem silêncio.
 - **Continuar ouvindo** no topo da biblioteca, com os álbuns tocados por último.
 - **Fotos de artistas**: usa o `artist.jpg` da pasta do artista ou, se não tiver, a foto do Deezer em 1000 px (opcional). A foto só é aceita se algum álbum ou música seu estiver na discografia, para não pegar um homônimo.
+- **Playlists**: crie, renomeie, reordene arrastando e adicione músicas ou álbuns pelo botão direito. No Windows, importe e exporte `.m3u`.
+- **Volume igual entre músicas**: usa o ReplayGain do arquivo ou mede o volume uma vez (norma EBU R128) e abaixa as faixas mais altas.
 - **Fila editável**: botão direito numa música para *Tocar a seguir* ou *Adicionar à fila*; no *A seguir*, arraste para mudar a ordem.
 - **Letras sincronizadas** que acompanham a música: de um `.lrc` ao lado do arquivo, da letra gravada nele ou do [LRCLIB](https://lrclib.net) (opcional).
 - **Abre direto do Windows**: dois cliques num arquivo de música (ou *Abrir com › Sleeve*) tocam na hora, mesmo fora da biblioteca.
@@ -103,3 +105,7 @@ Marca das duas pílulas em violeta **#7C3AED**, fundo **#F5F5F7** (claro) ou **#
 ## Licença
 
 Código sob a licença [MIT](LICENSE). A fonte Plus Jakarta Sans é distribuída sob a [SIL Open Font License 1.1](src/web/fontes/OFL.txt).
+
+## Assinatura e privacidade
+
+Veja a [política de assinatura de código e de privacidade](CODE_SIGNING_POLICY.md).

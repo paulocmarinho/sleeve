@@ -11,7 +11,8 @@ using System.Threading.Tasks;
 namespace Sleeve;
 
 // O que a interface recebe (os nomes em minúsculo viram o JSON)
-public sealed record TrackDto(string id, string title, string artist, int number, int disc, double duration, string url);
+public sealed record TrackDto(string id, string title, string artist, int number, int disc, double duration, string url,
+    double? gain = null, double? albumGain = null); // ganho ReplayGain em dB, quando o arquivo tem
 
 public sealed class AlbumDto
 {
@@ -54,7 +55,13 @@ public sealed class LibraryService
         public int Disc { get; set; }
         public int Year { get; set; }
         public double Duration { get; set; }
+        public double? TrackGain { get; set; }
+        public double? AlbumGain { get; set; }
+        public int V { get; set; } // versão do que foi lido; abaixo de EntryVersion, lê de novo
     }
+
+    // 2: passou a ler o ReplayGain
+    private const int EntryVersion = 2;
 
     private Dictionary<string, FileEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
@@ -113,7 +120,7 @@ public sealed class LibraryService
 
                 FileEntry? entry;
                 lock (_gate) _entries.TryGetValue(path, out entry);
-                if (entry is null || entry.Modified != modified || entry.Size != info.Length)
+                if (entry is null || entry.Modified != modified || entry.Size != info.Length || entry.V < EntryVersion)
                     entry = IsCloudOnly(info) ? FromFileName(path, modified, info.Length) : ReadTags(path, modified, info.Length);
 
                 found.Add(entry);
@@ -179,13 +186,13 @@ public sealed class LibraryService
 
     private static FileEntry FromFileName(string path, long modified, long size) => new()
     {
-        Path = path, Modified = modified, Size = size,
+        Path = path, Modified = modified, Size = size, V = EntryVersion,
         Title = Path.GetFileNameWithoutExtension(path),
     };
 
     private static FileEntry ReadTags(string path, long modified, long size)
     {
-        var e = new FileEntry { Path = path, Modified = modified, Size = size };
+        var e = new FileEntry { Path = path, Modified = modified, Size = size, V = EntryVersion };
         try
         {
             using var f = TagLib.File.Create(path);
@@ -198,6 +205,8 @@ public sealed class LibraryService
             e.Disc = (int)t.Disc;
             e.Year = (int)t.Year;
             e.Duration = f.Properties?.Duration.TotalSeconds ?? 0;
+            if (double.IsFinite(t.ReplayGainTrackGain)) e.TrackGain = Math.Round(t.ReplayGainTrackGain, 2);
+            if (double.IsFinite(t.ReplayGainAlbumGain)) e.AlbumGain = Math.Round(t.ReplayGainAlbumGain, 2);
         }
         catch
         {
@@ -230,7 +239,7 @@ public sealed class LibraryService
                 year = firstYear > 0 ? firstYear : null,
                 added = list.Max(e => e.Modified),
                 tracks = list.Select((e, i) => new TrackDto(
-                    Hash(e.Path), e.Title, e.Artist, e.Number > 0 ? e.Number : i + 1, Math.Max(1, e.Disc), Math.Round(e.Duration, 1), UrlFor(e.Path, folders))).ToList(),
+                    Hash(e.Path), e.Title, e.Artist, e.Number > 0 ? e.Number : i + 1, Math.Max(1, e.Disc), Math.Round(e.Duration, 1), UrlFor(e.Path, folders), e.TrackGain, e.AlbumGain)).ToList(),
             };
             album.tracks.RemoveAll(t => t.url.Length == 0);
             if (album.tracks.Count == 0) continue;
@@ -330,6 +339,8 @@ public sealed class LibraryService
             color,
             duration = double.IsFinite(e.Duration) ? Math.Round(e.Duration, 1) : 0,
             url,
+            gain = e.TrackGain,
+            albumGain = e.AlbumGain,
         };
     }
 

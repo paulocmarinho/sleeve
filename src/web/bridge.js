@@ -18,6 +18,9 @@
 //   {type:'repair', id, url}               arquivo não abriu; volta {type:'repaired', id, url|null} com uma cópia tocável
 //   {type:'artistPhotos', online, artists:[{name, albums, tracks, urls}]}  volta um {type:'artistPhoto', name, url|null} por artista
 //   {type:'playstate', playing, canPrevious, canNext}  para os botões da barra de tarefas
+//   {type:'loudness', items:[{id, url}]}   mede o volume; volta um {type:'loudness', id, gain} (dB, padrão ReplayGain) por faixa
+//   {type:'playlistImport'}               escolher um .m3u; volta {type:'playlistImported', name, ids}
+//   {type:'playlistExport', name, urls}   salvar como .m3u; volta {type:'playlistExported', path}
 //   {type:'theme', dark}                  tema da interface, para a janela acompanhar
 //   {type:'language', lang}               idioma da interface (pt-BR, en, es), para a bandeja e os avisos
 //   {type:'update', action:'check'|'restart'|'page'}
@@ -35,6 +38,7 @@ function windowsHost() {
   const wv = window.chrome.webview;
   return {
     kind: 'windows',
+    canPlaylistFiles: true, // importar e exportar .m3u pelas janelas do Windows
     send: (msg) => wv.postMessage(msg),
     on: (fn) => wv.addEventListener('message', (e) => fn(e.data)),
   };
@@ -65,6 +69,7 @@ function demoHost() {
         // No navegador de teste: a capa do primeiro álbum faz o papel da foto
         msg.artists.forEach((ar, k) => setTimeout(() => listeners.forEach((fn) => fn({ type: 'artistPhoto', name: ar.name, url: null })), 100 + k * 30));
       }
+      if (msg.type === 'loudness') msg.items.forEach((it, k) => setTimeout(() => listeners.forEach((fn) => fn({ type: 'loudness', id: it.id, gain: -6 - k })), 300));
       if (msg.type === 'repair') listeners.forEach((fn) => fn({ type: 'repaired', id: msg.id, url: null }));
       if (msg.type === 'lyrics') {
         // Letra de mentira, só para ver o painel funcionando no navegador

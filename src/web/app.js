@@ -45,6 +45,8 @@ const I = {
   queueAdd: svg('<path d="M4 6h12M4 11h12M4 16h7"/><path d="M18 14v6M15 17h6"/>'),
   playNext: svg('<path d="M4 6h10M4 11h10M4 16h6"/><path class="fill" d="M15 13v8l6-4z"/>'),
   album: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>'),
+  list: svg('<path d="M4 6h11M4 11h11M4 16h7"/><circle cx="18" cy="17" r="2.5"/><path d="M20.5 17V8l-3 1"/>'),
+  more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'),
   pin: svg('<path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v8"/>'),
 };
 const MARK = '<svg class="mark" viewBox="0 0 120 120" aria-hidden="true"><line x1="30.2" y1="58.6" x2="74.2" y2="25.6"/><line x1="45.8" y1="94.4" x2="89.8" y2="61.4"/></svg>';
@@ -103,13 +105,15 @@ const S = {
   lyricsOn: load('lyricsOn', false), onlineLyrics: load('onlineLyrics', true),
   lyr: { key: '', state: 'idle', lines: null, plain: '' }, // letra da música atual
   recentAlbums: load('recentAlbums', []), // álbuns tocados por último, para o "Continuar ouvindo"
+  normalize: load('normalize', true), // volume igual entre músicas
+  playlists: load('playlists', []), // [{ id, name, tracks: [id da faixa], created }]
   artistPhotosOnline: load('artistPhotosOnline', true),
   artistPhotos: new Map(), // nome do artista -> endereço da foto ('' = não tem)
   lang: load('lang', 'auto'), // 'auto' segue o idioma do sistema
   theme: load('theme', 'auto'), // 'auto' segue o Windows/Alba; 'light' ou 'dark' fixos
   lists: {},  // listas de faixas visíveis, para tocar a partir de um clique
 };
-players.forEach((p) => { p.volume = S.volume; });
+players.forEach((p) => { p.volume = Math.min(1, S.volume * 10 ** (-4 / 20)); });
 
 const current = () => S.queue[S.index] ?? null;
 
@@ -289,8 +293,10 @@ function loadCurrent(autoplay) {
   if (!t) return;
   if (t.url) {
     audio.src = t.url;
+    applyVolume();
     if (autoplay) audio.play().catch(() => {});
   }
+  wantLoudness([t, S.queue[S.index + 1], S.queue[S.index + 2]]);
   countPlay(t);
   renderPlayback(true);
 }
@@ -302,6 +308,117 @@ function countPlay(t) {
     S.recentAlbums = [a.id, ...S.recentAlbums.filter((x) => x !== a.id)].slice(0, 12);
     save('recentAlbums', S.recentAlbums);
   }
+}
+
+// ---------- Volume igual entre músicas ----------
+// Usa o ReplayGain das etiquetas; sem etiqueta, o sistema mede o volume da faixa (uma vez, fica guardado).
+// Só abaixa o volume das faixas mais altas: aumentar além de 100% distorceria.
+const PREAMP = 4; // dB: alvo perto de -14 LUFS (o mesmo do Spotify) em vez dos -18 do ReplayGain
+const measured = new Map(); // id da faixa -> ganho medido (dB) ou null
+const askedLoud = new Set();
+function gainDb(t) {
+  if (!S.normalize || !t) return 0;
+  // Álbum tocado em ordem: usa o ganho do álbum, para não mudar o volume entre faixas de propósito mais baixas
+  const albumMode = !S.shuffle && S.queue.length > 1 && S.queue.every((x) => x.albumId === t.albumId);
+  const g = (albumMode && Number.isFinite(t.albumGain) ? t.albumGain : null)
+    ?? (Number.isFinite(t.gain) ? t.gain : null) ?? measured.get(t.id);
+  return g == null ? -4 : g + PREAMP; // ainda sem medida: um meio-termo
+}
+const levelFor = (t) => Math.min(1, Math.max(0, S.volume * 10 ** (gainDb(t) / 20)));
+let rampTimer = 0;
+/** Ajusta o volume do player ao da faixa; com ramp, muda devagar (quando a medida chega já tocando). */
+function applyVolume(ramp = false) {
+  clearInterval(rampTimer);
+  const target = levelFor(current());
+  if (!ramp || audio.paused) { audio.volume = target; return; }
+  const from = audio.volume, start = performance.now();
+  rampTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - start) / 900);
+    audio.volume = from + (target - from) * k;
+    if (k >= 1) clearInterval(rampTimer);
+  }, 30);
+}
+function wantLoudness(list) {
+  if (!S.normalize) return;
+  const items = list.filter((t) => t?.url && !Number.isFinite(t.gain) && !measured.has(t.id) && !askedLoud.has(t.id));
+  if (!items.length) return;
+  items.forEach((t) => askedLoud.add(t.id));
+  host.send({ type: 'loudness', items: items.map((t) => ({ id: t.id, url: t.url })) });
+}
+function gotLoudness(msg) {
+  measured.set(msg.id, Number.isFinite(msg.gain) ? msg.gain : null);
+  if (current()?.id === msg.id) applyVolume(true);
+}
+
+// ---------- Playlists ----------
+const savePlaylists = () => save('playlists', S.playlists);
+const playlistById = (id) => S.playlists.find((p) => p.id === id);
+const playlistTracks = (p) => p.tracks.map((id) => S.trackById.get(id)).filter(Boolean);
+function newPlaylist(name, ids = []) {
+  const p = { id: 'pl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, tracks: [...ids], created: Date.now() };
+  S.playlists.unshift(p);
+  savePlaylists();
+  renderNav();
+  return p;
+}
+function addToPlaylist(p, tracks) {
+  const ids = tracks.filter(Boolean).map((t) => t.id);
+  p.tracks.push(...ids);
+  savePlaylists();
+  toast(tx(ids.length === 1 ? 'pl.toastAdded' : 'pl.toastAddedN', { t: ids.length === 1 ? `"${tracks[0].title}"` : tx('album.tracksN', { n: ids.length }), p: p.name }));
+  if (S.view.name === 'playlists' || (S.view.name === 'playlist' && S.view.id === p.id)) renderView();
+}
+/** Menu com as playlists, para escolher onde pôr as faixas. */
+function choosePlaylist(x, y, tracks) {
+  openMenu(x, y, [
+    { label: tx('pl.new'), icon: I.plus, run: () => askText(tx('pl.newTitle'), tx('pl.untitled'), (name) => addToPlaylist(newPlaylist(name), tracks)) },
+    ...S.playlists.map((p) => ({ label: p.name, icon: I.list, run: () => addToPlaylist(p, tracks) })),
+  ]);
+}
+function playlistCover(p) {
+  // Mosaico com as capas dos primeiros álbuns diferentes
+  const covers = [...new Set(playlistTracks(p).map((t) => S.albumById.get(t.albumId)?.cover).filter(Boolean))].slice(0, 4);
+  if (covers.length < 4) return coverHtml(covers[0] || '', p.name);
+  return `<div class="cover mosaic">${covers.map((c) => `<img src="${esc(c)}" alt="" loading="lazy">`).join('')}</div>`;
+}
+
+// Caixinha para digitar um nome (playlist nova, renomear)
+function askText(title, value, done, okLabel) {
+  closeMenu();
+  const box = document.createElement('div');
+  box.className = 'dialog-back';
+  box.innerHTML = `<form class="dialog" role="dialog" aria-label="${esc(title)}">
+    <h2>${esc(title)}</h2>
+    <input type="text" maxlength="80" value="${esc(value)}" aria-label="${esc(title)}">
+    <div class="dialog-actions"><button type="button" class="btn" data-x>${tx('common.cancel')}</button><button type="submit" class="btn primary">${okLabel || tx('common.ok')}</button></div>
+  </form>`;
+  document.body.append(box);
+  const input = box.querySelector('input');
+  input.focus(); input.select();
+  const close = () => box.remove();
+  box.addEventListener('pointerdown', (e) => { if (e.target === box) close(); });
+  box.querySelector('[data-x]').addEventListener('click', close);
+  box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  box.querySelector('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    close();
+    done(v);
+  });
+}
+function askConfirm(title, text, okLabel, done) {
+  const box = document.createElement('div');
+  box.className = 'dialog-back';
+  box.innerHTML = `<div class="dialog" role="alertdialog" aria-label="${esc(title)}"><h2>${esc(title)}</h2><p>${esc(text)}</p>
+    <div class="dialog-actions"><button type="button" class="btn" data-x>${tx('common.cancel')}</button><button type="button" class="btn danger" data-ok>${esc(okLabel)}</button></div></div>`;
+  document.body.append(box);
+  const close = () => box.remove();
+  box.querySelector('[data-x]').addEventListener('click', close);
+  box.querySelector('[data-ok]').addEventListener('click', () => { close(); done(); });
+  box.addEventListener('pointerdown', (e) => { if (e.target === box) close(); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  box.querySelector('[data-ok]').focus();
 }
 
 // ---------- Sem pausa entre faixas ----------
@@ -317,6 +434,7 @@ function prepareNext() {
   if (audio.paused || !audio.duration || audio.duration - audio.currentTime > 20) return;
   const n = upcoming();
   if (!n?.t?.url || standbyFor === n.t) return;
+  wantLoudness([n.t]);
   standbyFor = n.t;
   standby.src = n.t.url;
   standby.load();
@@ -326,7 +444,7 @@ function handoff() {
   const n = upcoming();
   if (!n || standbyFor !== n.t || standby.readyState < 3) return false;
   const old = audio;
-  standby.volume = old.volume;
+  standby.volume = levelFor(n.t);
   standby.muted = old.muted;
   standby.currentTime = 0;
   audio = standby;
@@ -384,7 +502,8 @@ function enqueue(tracks, nextUp) {
     S.baseQueue.push(...tracks);
   }
   renderPlayback();
-  toast(tx(nextUp ? 'queue.toastNext' : 'queue.toastAdd', { t: tracks.length === 1 ? tracks[0].title : tx('album.tracksN', { n: tracks.length }) }));
+  const one = tracks.length === 1;
+  toast(tx((nextUp ? 'queue.toastNext' : 'queue.toastAdd') + (one ? '' : 'N'), { t: tracks.length === 1 ? `"${tracks[0].title}"` : tx('album.tracksN', { n: tracks.length }) }));
 }
 function dequeue(i) {
   if (i <= S.index || i >= S.queue.length) return;
@@ -392,6 +511,18 @@ function dequeue(i) {
   // Tira da lista base só se a faixa não aparecer mais na fila
   if (!S.queue.includes(t)) { const b = S.baseQueue.indexOf(t); if (b >= 0) S.baseQueue.splice(b, 1); }
   renderPlayback();
+}
+function removeFromPlaylist(p, i) {
+  p.tracks.splice(i, 1);
+  savePlaylists();
+  renderView();
+}
+function moveInPlaylist(p, from, to) {
+  if (from === to) return;
+  const [id] = p.tracks.splice(from, 1);
+  p.tracks.splice(to, 0, id);
+  savePlaylists();
+  renderView();
 }
 function moveInQueue(from, to) {
   if (from <= S.index || to <= S.index || from === to || from >= S.queue.length) return;
@@ -499,6 +630,19 @@ function openMenu(x, y, items) {
 document.addEventListener('contextmenu', (e) => {
   const li = e.target.closest('[data-act="play"]');
   const q = e.target.closest('.queue [data-act="jump"]');
+  const card = e.target.closest('.card-open[data-act="album"]');
+  if (card) {
+    e.preventDefault();
+    const a = S.albumById.get(card.dataset.id);
+    if (!a) return;
+    openMenu(e.clientX, e.clientY, [
+      { label: tx('common.play'), icon: I.play, run: () => playList(a.tracks, 0) },
+      { label: tx('queue.playNext'), icon: I.playNext, run: () => enqueue(a.tracks, true) },
+      { label: tx('queue.add'), icon: I.queueAdd, run: () => enqueue(a.tracks, false) },
+      { label: tx('pl.addTo'), icon: I.list, run: () => choosePlaylist(e.clientX, e.clientY, a.tracks) },
+    ]);
+    return;
+  }
   if (!li && !q) return;
   e.preventDefault();
   if (q) {
@@ -517,7 +661,12 @@ document.addEventListener('contextmenu', (e) => {
     { label: tx('common.play'), icon: I.play, run: () => playList(list, +li.dataset.i) },
     { label: tx('queue.playNext'), icon: I.playNext, run: () => enqueue([t], true) },
     { label: tx('queue.add'), icon: I.queueAdd, run: () => enqueue([t], false) },
+    { label: tx('pl.addTo'), icon: I.list, run: () => choosePlaylist(e.clientX, e.clientY, [t]) },
   ];
+  if (li.dataset.list?.startsWith('pl:')) {
+    const p = playlistById(li.dataset.list.slice(3));
+    if (p) items.push({ label: tx('pl.removeFrom'), icon: I.close, run: () => removeFromPlaylist(p, +li.dataset.i) });
+  }
   if (a && !a.loose && S.view.name !== 'album') items.push({ label: tx('menu.goAlbum'), icon: I.album, run: () => go({ name: 'album', id: a.id }) });
   if (a && !a.loose && S.view.name !== 'artist') items.push({ label: tx('menu.goArtist'), icon: I.artists, run: () => go({ name: 'artist', id: artistOf(a) }) });
   openMenu(e.clientX, e.clientY, items);
@@ -529,7 +678,10 @@ document.addEventListener('scroll', () => { if (performance.now() - menuAt > 250
 
 // Arrastar faixas no "A seguir" para mudar a ordem
 let dragFrom = -1;
+let plDrag = -1;
 document.addEventListener('dragstart', (e) => {
+  const row = e.target.closest?.('.pl-tracks .track');
+  if (row) { plDrag = +row.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(plDrag)); row.classList.add('dragging'); return; }
   const q = e.target.closest?.('.queue [data-act="jump"]');
   if (!q) return;
   dragFrom = +q.dataset.i;
@@ -538,6 +690,14 @@ document.addEventListener('dragstart', (e) => {
   q.classList.add('dragging');
 });
 document.addEventListener('dragover', (e) => {
+  const row = e.target.closest?.('.pl-tracks .track');
+  if (plDrag >= 0 && row) {
+    e.preventDefault();
+    document.querySelectorAll('.pl-tracks .track.over').forEach((x) => x !== row && x.classList.remove('over', 'after'));
+    row.classList.add('over');
+    row.classList.toggle('after', plDrag < +row.dataset.i);
+    return;
+  }
   const q = e.target.closest?.('.queue [data-act="jump"]');
   if (dragFrom < 0 || !q) return;
   e.preventDefault();
@@ -546,6 +706,15 @@ document.addEventListener('dragover', (e) => {
   q.classList.toggle('after', dragFrom < +q.dataset.i); // descendo: entra depois; subindo: entra antes
 });
 document.addEventListener('drop', (e) => {
+  const row = e.target.closest?.('.pl-tracks .track');
+  if (plDrag >= 0 && row) {
+    e.preventDefault();
+    const p = playlistById(S.view.id);
+    const from = plDrag;
+    plDrag = -1;
+    if (p) moveInPlaylist(p, from, +row.dataset.i);
+    return;
+  }
   const q = e.target.closest?.('.queue [data-act="jump"]');
   if (dragFrom < 0 || !q) return;
   e.preventDefault();
@@ -555,6 +724,8 @@ document.addEventListener('drop', (e) => {
 });
 document.addEventListener('dragend', () => {
   dragFrom = -1;
+  plDrag = -1;
+  document.querySelectorAll('.pl-tracks .track.over, .pl-tracks .track.dragging').forEach((x) => x.classList.remove('over', 'after', 'dragging'));
   document.querySelectorAll('.queue .q.over, .queue .q.dragging').forEach((x) => x.classList.remove('over', 'after', 'dragging'));
 });
 
@@ -578,7 +749,7 @@ const cmd = {
   volume(v) {
     v = Math.min(1, Math.max(0, v));
     if (mode() === 'spotify') { S.spotify.volume = v; host.send({ type: 'volume', app: S.spotify.source || 'Spotify', value: v }); }
-    else { S.volume = v; audio.volume = v; audio.muted = false; save('volume', v); }
+    else { S.volume = v; applyVolume(); audio.muted = false; save('volume', v); }
     renderVolume();
   },
   like() {
@@ -634,10 +805,11 @@ const NAV = [
   ['artists', 'nav.artists', I.artists],
   ['tracks', 'nav.tracks', I.music],
   ['likes', 'nav.likes', I.heart],
+  ['playlists', 'nav.playlists', I.list],
   ['folders', 'nav.folders', I.folder],
 ];
 function renderNav() {
-  const active = S.view.name === 'album' ? 'albums' : S.view.name === 'artist' ? 'artists' : S.view.name;
+  const active = S.view.name === 'album' ? 'albums' : S.view.name === 'artist' ? 'artists' : S.view.name === 'playlist' ? 'playlists' : S.view.name;
   $('#nav').innerHTML = NAV.map(([k, label, icon]) =>
     `<button type="button" class="nav-item${active === k ? ' active' : ''}" data-view="${k}">${icon}${tx(label)}</button>`).join('');
   document.querySelector('.nav-item.settings').classList.toggle('active', active === 'ajustes');
@@ -764,6 +936,45 @@ function renderView() {
     const tracks = S.allTracks.filter((t) => S.likes.has(t.id));
     html = `<div class="view-head"><h1>${tx('nav.likes')}</h1>${tracks.length ? `<div class="chips"><button type="button" class="btn primary" data-act="play-list" data-list="likes">${I.play}${tx('common.play')}</button></div>` : ''}</div>`
       + (tracks.length ? trackList('likes', tracks) : `<div class="empty">${MARK}<p>${tx('likes.empty')}</p></div>`);
+  } else if (v.name === 'playlists') {
+    html = `<div class="view-head"><h1>${tx('nav.playlists')}</h1>
+      <div class="chips"><button type="button" class="btn primary" data-act="pl-new">${I.plus}${tx('pl.new')}</button>
+      ${host.canPlaylistFiles ? `<button type="button" class="btn" data-act="pl-import">${tx('pl.import')}</button>` : ''}</div></div>`;
+    html += S.playlists.length ? `<div class="grid">${S.playlists.map((p) => `
+      <div class="card"><button type="button" class="card-open" data-act="playlist" data-id="${esc(p.id)}" style="all:unset;cursor:pointer;display:flex;flex-direction:column;gap:10px;min-width:0">
+        ${playlistCover(p)}<span class="t1">${esc(p.name)}</span>
+        <span class="t2">${tx(p.tracks.length === 1 ? 'album.track1' : 'album.tracksN', { n: p.tracks.length })}</span></button></div>`).join('')}</div>`
+      : `<div class="empty">${I.list}<p>${tx('pl.empty')}</p></div>`;
+  } else if (v.name === 'playlist') {
+    const p = playlistById(v.id);
+    if (!p) { go({ name: 'playlists' }); return; }
+    const tracks = playlistTracks(p);
+    const total = tracks.reduce((n, t) => n + (t.duration || 0), 0);
+    S.lists['pl:' + p.id] = tracks;
+    html = `<button type="button" class="back" data-act="back">${I.back}${tx('common.back')}</button>
+      <div class="album-head">
+        ${playlistCover(p)}
+        <div class="meta">
+          <span class="eyebrow">${tx('pl.eyebrow')}</span>
+          <h1>${esc(p.name)}</h1>
+          <span class="t2">${[tx(tracks.length === 1 ? 'album.track1' : 'album.tracksN', { n: tracks.length }), total ? fmt(total) : ''].filter(Boolean).join(' · ')}</span>
+          <div class="actions">
+            ${tracks.length ? `<button type="button" class="btn primary" data-act="play-list" data-list="pl:${esc(p.id)}">${I.play}${tx('common.play')}</button>
+            <button type="button" class="btn" data-act="shuffle-list" data-list="pl:${esc(p.id)}">${I.shuffle}${tx('common.shuffle')}</button>` : ''}
+            <button type="button" class="btn icon-only" data-act="pl-more" data-id="${esc(p.id)}" aria-label="${tx('pl.more')}">${I.more}</button>
+          </div>
+        </div>
+      </div>
+      ${tracks.length ? `<ol class="tracks pl-tracks">${tracks.map((t, i) => {
+        const a = S.albumById.get(t.albumId);
+        const playing = mode() === 'local' && current()?.id === t.id;
+        return `<li tabindex="0" draggable="true" class="track${playing ? ' playing' : ''}" data-act="play" data-list="pl:${esc(p.id)}" data-i="${i}" title="${tx('track.hint')}">
+          <span class="n">${i + 1}</span><span class="title">${esc(t.title)}</span>
+          <span class="sub">${esc(t.artist || a?.artist || '')}${a ? ' · ' + esc(a.title) : ''}</span>
+          <span class="dur">${fmt(t.duration)}</span>
+          <button type="button" class="pl-x" data-act="pl-remove" data-i="${i}" aria-label="${tx('pl.removeFrom')}">${I.close}</button>
+        </li>`;
+      }).join('')}</ol>` : `<div class="empty"><p>${tx('pl.emptyOne')}</p></div>`}`;
   } else if (v.name === 'folders') {
     html = `<div class="view-head"><h1>${tx('nav.folders')}</h1></div>
       <div class="panel">
@@ -790,6 +1001,7 @@ function renderView() {
         ${segRow(tx('set.appearance'), tx('set.appearanceHint'), themeBtn('auto', tx('theme.auto')) + themeBtn('light', tx('theme.light')) + themeBtn('dark', tx('theme.dark')))}
         ${segRow(tx('set.language'), tx('set.languageHint'), langBtn('auto', tx('theme.auto')) + Object.entries(NAMES).map(([k, n]) => langBtn(k, n)).join(''))}
         ${sw('hiRes', S.settings.hiRes, tx('set.hiRes'), tx('set.hiResHint'))}
+        ${sw('normalize', S.normalize, tx('set.normalize'), tx('set.normalizeHint'))}
         ${sw('onlineLyrics', S.onlineLyrics, tx('set.lyrics'), tx('set.lyricsHint'))}
         ${sw('artistPhotosOnline', S.artistPhotosOnline, tx('set.artistPhotos'), tx('set.artistPhotosHint'))}
         ${sw('startup', S.settings.startup, tx('set.startup'), '')}
@@ -1054,6 +1266,26 @@ document.addEventListener('click', (e) => {
     case 'mute': audio.muted = !audio.muted; renderPlayback(); break;
     case 'jump': S.index = +d.i; loadCurrent(true); break;
     case 'dequeue': dequeue(+d.i); break;
+    case 'playlist': go({ name: 'playlist', id: d.id }); break;
+    case 'pl-new': askText(tx('pl.newTitle'), tx('pl.untitled'), (name) => { const p = newPlaylist(name); go({ name: 'playlist', id: p.id }); }); break;
+    case 'pl-import': host.send({ type: 'playlistImport' }); break;
+    case 'pl-remove': { const p = playlistById(S.view.id); if (p) removeFromPlaylist(p, +d.i); break; }
+    case 'pl-more': {
+      const p = playlistById(d.id);
+      if (!p) break;
+      const r = el.getBoundingClientRect();
+      const items = [
+        { label: tx('pl.rename'), icon: I.list, run: () => askText(tx('pl.rename'), p.name, (name) => { p.name = name; savePlaylists(); renderNav(); renderView(); }) },
+        { label: tx('queue.playNext'), icon: I.playNext, run: () => enqueue(playlistTracks(p), true) },
+        { label: tx('queue.add'), icon: I.queueAdd, run: () => enqueue(playlistTracks(p), false) },
+      ];
+      if (host.canPlaylistFiles) items.push({ label: tx('pl.export'), icon: I.down, run: () => host.send({ type: 'playlistExport', name: p.name, urls: playlistTracks(p).map((t) => t.url) }) });
+      items.push({ label: tx('pl.delete'), icon: I.close, run: () => askConfirm(tx('pl.deleteTitle', { p: p.name }), tx('pl.deleteText'), tx('pl.delete'), () => {
+        S.playlists = S.playlists.filter((x) => x !== p); savePlaylists(); renderNav(); go({ name: 'playlists' });
+      }) });
+      openMenu(r.left, r.bottom + 6, items);
+      break;
+    }
     case 'lyrics': S.lyricsOn = !S.lyricsOn; save('lyricsOn', S.lyricsOn); renderPlayback(); break;
     case 'lyr-seek': {
       const i = info();
@@ -1070,6 +1302,13 @@ document.addEventListener('click', (e) => {
     case 'theme': S.theme = d.theme; save('theme', S.theme); applyTheme(); renderView(); break;
     case 'lang': S.lang = d.lang; save('lang', S.lang); applyLang(); renderAll(); break;
     case 'setting': {
+      if (d.key === 'normalize') {
+        S.normalize = !S.normalize; save('normalize', S.normalize);
+        el.setAttribute('aria-checked', String(S.normalize));
+        applyVolume(true);
+        if (S.normalize) wantLoudness([current(), S.queue[S.index + 1]]);
+        break;
+      }
       if (d.key === 'artistPhotosOnline') {
         S.artistPhotosOnline = !S.artistPhotosOnline; save('artistPhotosOnline', S.artistPhotosOnline);
         el.setAttribute('aria-checked', String(S.artistPhotosOnline));
@@ -1231,6 +1470,16 @@ host.on((msg) => {
     case 'lyrics': gotLyrics(msg); break;
     case 'repaired': gotRepair(msg); break;
     case 'artistPhoto': gotArtistPhoto(msg); break;
+    case 'loudness': gotLoudness(msg); break;
+    case 'playlistImported': {
+      const ids = (msg.ids || []).filter((id) => S.trackById.has(id));
+      if (!ids.length) { toast(tx('pl.importNone')); break; }
+      const p = newPlaylist(msg.name || tx('pl.untitled'), ids);
+      toast(tx('pl.imported', { p: p.name, n: ids.length }));
+      go({ name: 'playlist', id: p.id });
+      break;
+    }
+    case 'playlistExported': if (msg.path) toast(tx('pl.exported')); break;
     case 'media-key':
       if (msg.key === 'toggle') cmd.toggle();
       else if (msg.key === 'next') cmd.next();
